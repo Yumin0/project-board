@@ -11,7 +11,7 @@ datasource db {
 
 // Project Board Models
 model Member {
-  id        String     @id @default(cuid())
+  id        String     @id @default(dbgenerated("nextval('members_id_seq')::text"))
   name      String     @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -22,7 +22,7 @@ model Member {
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String   @id @default(dbgenerated("nextval('projects_id_seq')::text"))
   title       String
   description String?
   status      String   @default("not_started") // not_started, in_progress, completed
@@ -42,7 +42,7 @@ model Project {
 }
 
 model Category {
-  id        String          @id @default(cuid())
+  id        String          @id @default(dbgenerated("nextval('categories_id_seq')::text"))
   name      String          @unique
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
@@ -54,7 +54,7 @@ model Category {
 }
 
 model CategoryField {
-  id         String   @id @default(cuid())
+  id         String   @id @default(dbgenerated("nextval('category_fields_id_seq')::text"))
   name       String
   type       String   // text, number, date, select
   options    String[] @default([])
@@ -70,7 +70,7 @@ model CategoryField {
 }
 
 model Task {
-  id        String     @id @default(cuid())
+  id        String     @id @default(dbgenerated("nextval('tasks_id_seq')::text"))
   title     String
   description String?
   status    String     @default("todo") // todo, in_progress, done

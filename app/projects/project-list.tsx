@@ -1,4 +1,10 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import { ListChecksIcon, SearchIcon, XIcon } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -8,7 +14,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { DeleteProjectDialog, EditProjectDialog } from "./project-dialogs"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import { BatchEditDialog, DeleteProjectDialog, EditProjectDialog } from "./project-dialogs"
 
 type CategoryField = {
   id: string
@@ -60,6 +76,26 @@ const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
   completed: "secondary",
 }
 
+const FILTER_ALL = "__all__"
+const FILTER_UNCATEGORIZED = "__uncategorized__"
+const FILTER_UNASSIGNED = "__unassigned__"
+
+type Filters = {
+  search: string
+  status: string
+  categoryId: string
+  assigneeId: string
+  customFieldFilters: Record<string, string>
+}
+
+const initialFilters: Filters = {
+  search: "",
+  status: FILTER_ALL,
+  categoryId: FILTER_ALL,
+  assigneeId: FILTER_ALL,
+  customFieldFilters: {},
+}
+
 export function ProjectList({
   projects,
   members,
@@ -69,6 +105,107 @@ export function ProjectList({
   members: Member[]
   categories: CategoryOption[]
 }) {
+  const [filters, setFilters] = useState<Filters>(initialFilters)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchEditOpen, setBatchEditOpen] = useState(false)
+
+  const filterableFields = useMemo(() => {
+    if (filters.categoryId === FILTER_ALL || filters.categoryId === FILTER_UNCATEGORIZED) {
+      return []
+    }
+    const category = categories.find((item) => item.id === filters.categoryId)
+    return category?.fields.filter((field) => field.type === "select") ?? []
+  }, [categories, filters.categoryId])
+
+  const filteredProjects = useMemo(() => {
+    const query = filters.search.trim().toLowerCase()
+
+    return projects.filter((project) => {
+      if (query) {
+        const matchesTitle = project.title.toLowerCase().includes(query)
+        const matchesDescription = (project.description ?? "").toLowerCase().includes(query)
+        if (!matchesTitle && !matchesDescription) return false
+      }
+
+      if (filters.status !== FILTER_ALL && project.status !== filters.status) {
+        return false
+      }
+
+      if (filters.categoryId === FILTER_UNCATEGORIZED) {
+        if (project.categoryId) return false
+      } else if (filters.categoryId !== FILTER_ALL && project.categoryId !== filters.categoryId) {
+        return false
+      }
+
+      if (filters.assigneeId === FILTER_UNASSIGNED) {
+        if (project.assigneeId) return false
+      } else if (filters.assigneeId !== FILTER_ALL && project.assigneeId !== filters.assigneeId) {
+        return false
+      }
+
+      for (const [fieldId, value] of Object.entries(filters.customFieldFilters)) {
+        if (!value || value === FILTER_ALL) continue
+        if ((project.customFieldValues?.[fieldId] ?? "") !== value) return false
+      }
+
+      return true
+    })
+  }, [projects, filters])
+
+  const hasActiveFilters =
+    filters.search.trim() !== "" ||
+    filters.status !== FILTER_ALL ||
+    filters.categoryId !== FILTER_ALL ||
+    filters.assigneeId !== FILTER_ALL ||
+    Object.values(filters.customFieldFilters).some((value) => value && value !== FILTER_ALL)
+
+  const allFilteredSelected =
+    filteredProjects.length > 0 && filteredProjects.every((project) => selectedIds.has(project.id))
+
+  const selectedProjects = useMemo(
+    () => projects.filter((project) => selectedIds.has(project.id)),
+    [projects, selectedIds]
+  )
+
+  function updateFilters(patch: Partial<Filters>) {
+    setFilters((prev) => ({ ...prev, ...patch }))
+  }
+
+  function toggleSelectionMode() {
+    setSelectionMode((prev) => {
+      if (prev) setSelectedIds(new Set())
+      return !prev
+    })
+  }
+
+  function toggleProjectSelection(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allFilteredSelected) {
+        filteredProjects.forEach((project) => next.delete(project.id))
+      } else {
+        filteredProjects.forEach((project) => next.add(project.id))
+      }
+      return next
+    })
+  }
+
+  function handleBatchEditSuccess() {
+    setBatchEditOpen(false)
+    setSelectedIds(new Set())
+    setSelectionMode(false)
+  }
+
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed py-16 text-center">
@@ -81,56 +218,254 @@ export function ProjectList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {projects.map((project) => {
-        const filledCustomFields = (project.category?.fields ?? []).flatMap((field) => {
-          const value = project.customFieldValues?.[field.id]
-          return value ? [{ field, value }] : []
-        })
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 rounded-xl border p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[180px] flex-1">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={filters.search}
+              onChange={(event) => updateFilters({ search: event.target.value })}
+              placeholder="搜尋標題或描述"
+              className="pl-8"
+            />
+          </div>
 
-        return (
-          <Card key={project.id}>
-            <CardHeader>
-              <CardTitle>{project.title}</CardTitle>
-              {project.description && (
-                <CardDescription className="line-clamp-3">
-                  {project.description}
-                </CardDescription>
-              )}
-              <CardAction className="flex gap-1">
-                <EditProjectDialog
-                  project={project}
-                  members={members}
-                  categories={categories}
-                />
-                <DeleteProjectDialog project={project} />
-              </CardAction>
-            </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-1.5">
-              <Badge variant={statusVariant[project.status] ?? "default"}>
-                {statusLabel[project.status] ?? project.status}
-              </Badge>
-              {project.category && (
-                <Badge variant="outline">{project.category.name}</Badge>
-              )}
-              {filledCustomFields.map(({ field, value }) => (
-                <Badge key={field.id} variant="secondary">
-                  {field.name}：{value}
-                </Badge>
+          <Select
+            value={filters.status}
+            onValueChange={(value) => updateFilters({ status: value ?? FILTER_ALL })}
+          >
+            <SelectTrigger className="w-fit">
+              <SelectValue placeholder="狀態">
+                {(value: string) =>
+                  value === FILTER_ALL ? "全部狀態" : (statusLabel[value] ?? value)
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>全部狀態</SelectItem>
+              <SelectItem value="not_started">尚未開始</SelectItem>
+              <SelectItem value="in_progress">進行中</SelectItem>
+              <SelectItem value="completed">已結案</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.categoryId}
+            onValueChange={(value) =>
+              updateFilters({ categoryId: value ?? FILTER_ALL, customFieldFilters: {} })
+            }
+          >
+            <SelectTrigger className="w-fit">
+              <SelectValue placeholder="類型">
+                {(value: string) => {
+                  if (value === FILTER_ALL) return "全部類型"
+                  if (value === FILTER_UNCATEGORIZED) return "未分類"
+                  return categories.find((category) => category.id === value)?.name ?? "全部類型"
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>全部類型</SelectItem>
+              <SelectItem value={FILTER_UNCATEGORIZED}>未分類</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
               ))}
-              {project.assignee && (
-                <Badge variant="outline">負責人：{project.assignee.name}</Badge>
-              )}
-            </CardContent>
-            <CardFooter className="text-xs text-muted-foreground">
-              {project.tasks.length} 項任務 · 更新於{" "}
-              {new Intl.DateTimeFormat("zh-TW", {
-                dateStyle: "medium",
-              }).format(project.updatedAt)}
-            </CardFooter>
-          </Card>
-        )
-      })}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.assigneeId}
+            onValueChange={(value) => updateFilters({ assigneeId: value ?? FILTER_ALL })}
+          >
+            <SelectTrigger className="w-fit">
+              <SelectValue placeholder="負責人">
+                {(value: string) => {
+                  if (value === FILTER_ALL) return "全部負責人"
+                  if (value === FILTER_UNASSIGNED) return "未指派"
+                  return members.find((member) => member.id === value)?.name ?? "全部負責人"
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>全部負責人</SelectItem>
+              <SelectItem value={FILTER_UNASSIGNED}>未指派</SelectItem>
+              {members.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {filterableFields.map((field) => (
+            <Select
+              key={field.id}
+              value={filters.customFieldFilters[field.id] ?? FILTER_ALL}
+              onValueChange={(value) =>
+                updateFilters({
+                  customFieldFilters: {
+                    ...filters.customFieldFilters,
+                    [field.id]: value ?? FILTER_ALL,
+                  },
+                })
+              }
+            >
+              <SelectTrigger className="w-fit">
+                <SelectValue placeholder={field.name}>
+                  {(value: string) => (value === FILTER_ALL ? `全部${field.name}` : value)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={FILTER_ALL}>全部{field.name}</SelectItem>
+                {field.options.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={() => setFilters(initialFilters)}>
+              <XIcon data-icon="inline-start" />
+              清除篩選
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            符合 {filteredProjects.length} / {projects.length} 個專案
+          </span>
+          <div className="flex items-center gap-2">
+            {selectionMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleSelectAll}
+                disabled={filteredProjects.length === 0}
+              >
+                {allFilteredSelected ? "取消全選" : "全選篩選結果"}
+              </Button>
+            )}
+            <Button
+              variant={selectionMode ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleSelectionMode}
+            >
+              <ListChecksIcon data-icon="inline-start" />
+              {selectionMode ? "結束批次編輯" : "批次編輯"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {filteredProjects.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed py-16 text-center">
+          <p className="text-sm font-medium">沒有符合篩選條件的專案</p>
+          <p className="text-sm text-muted-foreground">
+            試著調整篩選條件，或清除篩選看看全部專案
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredProjects.map((project) => {
+            const filledCustomFields = (project.category?.fields ?? []).flatMap((field) => {
+              const value = project.customFieldValues?.[field.id]
+              return value ? [{ field, value }] : []
+            })
+            const isSelected = selectedIds.has(project.id)
+
+            return (
+              <Card
+                key={project.id}
+                className={cn(
+                  isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                )}
+              >
+                <CardHeader>
+                  <CardTitle>{project.title}</CardTitle>
+                  {project.description && (
+                    <CardDescription className="line-clamp-3">
+                      {project.description}
+                    </CardDescription>
+                  )}
+                  <CardAction className="flex items-center gap-1">
+                    {selectionMode ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleProjectSelection(project.id)}
+                        aria-label={`選取「${project.title}」`}
+                      />
+                    ) : (
+                      <>
+                        <EditProjectDialog
+                          project={project}
+                          members={members}
+                          categories={categories}
+                        />
+                        <DeleteProjectDialog project={project} />
+                      </>
+                    )}
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant={statusVariant[project.status] ?? "default"}>
+                    {statusLabel[project.status] ?? project.status}
+                  </Badge>
+                  {project.category && (
+                    <Badge variant="outline">{project.category.name}</Badge>
+                  )}
+                  {filledCustomFields.map(({ field, value }) => (
+                    <Badge key={field.id} variant="secondary">
+                      {field.name}：{value}
+                    </Badge>
+                  ))}
+                  {project.assignee && (
+                    <Badge variant="outline">負責人：{project.assignee.name}</Badge>
+                  )}
+                </CardContent>
+                <CardFooter className="text-xs text-muted-foreground">
+                  {project.tasks.length} 項任務 · 更新於{" "}
+                  {new Intl.DateTimeFormat("zh-TW", {
+                    dateStyle: "medium",
+                  }).format(project.updatedAt)}
+                </CardFooter>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+          <div className="flex items-center gap-3 rounded-xl border bg-popover px-4 py-2.5 text-sm shadow-lg ring-1 ring-foreground/10">
+            <span>已選取 {selectedIds.size} 個專案</span>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              取消選取
+            </Button>
+            <Button size="sm" onClick={() => setBatchEditOpen(true)}>
+              批次編輯
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <BatchEditDialog
+        open={batchEditOpen}
+        onOpenChange={setBatchEditOpen}
+        selectedProjects={selectedProjects.map((project) => ({
+          id: project.id,
+          categoryId: project.categoryId,
+        }))}
+        members={members}
+        categories={categories}
+        onSuccess={handleBatchEditSuccess}
+      />
     </div>
   )
 }
