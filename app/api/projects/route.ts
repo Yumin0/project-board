@@ -1,18 +1,19 @@
 // app/api/projects/route.ts
-// Example API route for fetching projects
+// API route for listing and creating projects
 
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
-const prisma = new PrismaClient({ adapter })
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
     const projects = await prisma.project.findMany({
       include: {
+        assignee: true,
         tasks: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     })
     return NextResponse.json(projects)
@@ -22,18 +23,28 @@ export async function GET() {
       { error: 'Failed to fetch projects' },
       { status: 500 }
     )
-  } finally {
-    await prisma.$disconnect()
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+
+    if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
+      return NextResponse.json(
+        { error: 'Title is required' },
+        { status: 400 }
+      )
+    }
+
     const project = await prisma.project.create({
       data: {
-        title: body.title,
+        title: body.title.trim(),
         description: body.description || null,
+        categoryId: body.categoryId || null,
+        customFieldValues: body.customFieldValues ?? Prisma.DbNull,
+        status: body.status || undefined,
+        assigneeId: body.assigneeId || null,
       },
     })
     return NextResponse.json(project, { status: 201 })
@@ -43,7 +54,5 @@ export async function POST(request: Request) {
       { error: 'Failed to create project' },
       { status: 500 }
     )
-  } finally {
-    await prisma.$disconnect()
   }
 }
