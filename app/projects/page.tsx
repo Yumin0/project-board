@@ -46,6 +46,13 @@ export default async function ProjectsPage() {
           >
             管理類別
           </Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/accounts" />}
+          >
+            收入帳戶
+          </Button>
           <NewProjectDialog members={members} categories={categories} />
         </div>
       </div>
