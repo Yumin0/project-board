@@ -9,6 +9,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 import { DeleteAccountDialog, EditAccountDialog } from "./account-dialogs"
 import {
   DeleteIncomeRecordDialog,
@@ -186,73 +195,91 @@ export function AccountList({
                   尚無收支紀錄
                 </p>
               ) : (
-                <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
-                  {ledger.map((entry) => (
-                    <li
-                      key={entry.key}
-                      className="flex items-center justify-between gap-2 rounded-lg border p-2.5"
-                    >
-                      <div className="flex min-w-0 flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span
-                            className={`font-medium tabular-nums ${
-                              entry.signedAmount < 0 ? "text-destructive" : ""
-                            }`}
-                          >
-                            {signedCurrencyFormatter.format(entry.signedAmount)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {dateFormatter.format(entry.date)}
-                          </span>
-                          {entry.kind === "income" ? (
-                            <Badge variant="outline">收入</Badge>
-                          ) : (
-                            <Badge variant="outline">
-                              {entry.direction === "in" ? "轉入" : "轉出"}
-                              {entry.counterpart ? `．${entry.counterpart.name}` : ""}
-                            </Badge>
-                          )}
-                          {entry.kind === "transfer" && entry.transfer.name && (
-                            <Badge variant="secondary">{entry.transfer.name}</Badge>
-                          )}
-                          {(entry.kind === "income" ? entry.record.project : entry.transfer.project) && (
-                            <Badge variant="secondary" className="max-w-full">
-                              <span className="truncate">
-                                {(entry.kind === "income" ? entry.record.project : entry.transfer.project)!.title}
-                              </span>
-                            </Badge>
-                          )}
-                        </div>
-                        {(entry.kind === "income" ? entry.record.note : entry.transfer.note) && (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {entry.kind === "income" ? entry.record.note : entry.transfer.note}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        {entry.kind === "income" ? (
-                          <>
-                            <EditIncomeRecordDialog
-                              record={entry.record}
-                              accounts={accountOptions}
-                              projects={projects}
-                            />
-                            <DeleteIncomeRecordDialog record={entry.record} />
-                          </>
-                        ) : (
-                          <>
-                            <EditTransferDialog
-                              transfer={entry.transfer}
-                              accounts={accountOptions}
-                              projects={projects}
-                            />
-                            <DeleteTransferDialog transfer={entry.transfer} />
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="max-h-80 overflow-y-auto rounded-lg border">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-16">日期</TableHead>
+                        <TableHead>內容</TableHead>
+                        <TableHead className="w-24 text-right">金額</TableHead>
+                        <TableHead className="w-16 text-right">操作</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ledger.map((entry) => {
+                        const project =
+                          entry.kind === "income" ? entry.record.project : entry.transfer.project
+                        const note = entry.kind === "income" ? entry.record.note : entry.transfer.note
+
+                        return (
+                          <TableRow key={entry.key}>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {dateFormatter.format(entry.date)}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              <div className="flex flex-col items-start gap-1">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {entry.kind === "income" ? (
+                                    <Badge variant="outline">收入</Badge>
+                                  ) : (
+                                    <Badge variant="outline">
+                                      {entry.direction === "in" ? "轉入" : "轉出"}
+                                      {entry.counterpart ? `．${entry.counterpart.name}` : ""}
+                                    </Badge>
+                                  )}
+                                  {entry.kind === "transfer" && entry.transfer.name && (
+                                    <Badge variant="secondary">{entry.transfer.name}</Badge>
+                                  )}
+                                  {project && (
+                                    <Badge variant="secondary" className="max-w-full">
+                                      <span className="truncate">{project.title}</span>
+                                    </Badge>
+                                  )}
+                                </div>
+                                {note && (
+                                  <p className="w-full break-words text-xs text-muted-foreground">
+                                    {note}
+                                  </p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                "text-right font-medium tabular-nums",
+                                entry.signedAmount < 0 && "text-destructive"
+                              )}
+                            >
+                              {signedCurrencyFormatter.format(entry.signedAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-0.5">
+                                {entry.kind === "income" ? (
+                                  <>
+                                    <EditIncomeRecordDialog
+                                      record={entry.record}
+                                      accounts={accountOptions}
+                                      projects={projects}
+                                    />
+                                    <DeleteIncomeRecordDialog record={entry.record} />
+                                  </>
+                                ) : (
+                                  <>
+                                    <EditTransferDialog
+                                      transfer={entry.transfer}
+                                      accounts={accountOptions}
+                                      projects={projects}
+                                    />
+                                    <DeleteTransferDialog transfer={entry.transfer} />
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>

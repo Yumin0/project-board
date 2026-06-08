@@ -23,6 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { BatchEditDialog, DeleteProjectDialog, EditProjectDialog } from "./project-dialogs"
 
@@ -372,73 +380,168 @@ export function ProjectList({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredProjects.map((project) => {
-            const filledCustomFields = (project.category?.fields ?? []).flatMap((field) => {
-              const value = project.customFieldValues?.[field.id]
-              return value ? [{ field, value }] : []
-            })
-            const isSelected = selectedIds.has(project.id)
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:hidden">
+            {filteredProjects.map((project) => {
+              const filledCustomFields = (project.category?.fields ?? []).flatMap((field) => {
+                const value = project.customFieldValues?.[field.id]
+                return value ? [{ field, value }] : []
+              })
+              const isSelected = selectedIds.has(project.id)
 
-            return (
-              <Card
-                key={project.id}
-                className={cn(
-                  isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                )}
-              >
-                <CardHeader>
-                  <CardTitle>{project.title}</CardTitle>
-                  {project.description && (
-                    <CardDescription className="line-clamp-3">
-                      {project.description}
-                    </CardDescription>
+              return (
+                <Card
+                  key={project.id}
+                  className={cn(
+                    isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                   )}
-                  <CardAction className="flex items-center gap-1">
-                    {selectionMode ? (
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleProjectSelection(project.id)}
-                        aria-label={`選取「${project.title}」`}
-                      />
-                    ) : (
-                      <>
-                        <EditProjectDialog
-                          project={project}
-                          members={members}
-                          categories={categories}
-                        />
-                        <DeleteProjectDialog project={project} />
-                      </>
+                >
+                  <CardHeader>
+                    <span className="font-mono text-xs text-muted-foreground">#{project.id}</span>
+                    <CardTitle>{project.title}</CardTitle>
+                    {project.description && (
+                      <CardDescription className="line-clamp-3">
+                        {project.description}
+                      </CardDescription>
                     )}
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant={statusVariant[project.status] ?? "default"}>
-                    {statusLabel[project.status] ?? project.status}
-                  </Badge>
-                  {project.category && (
-                    <Badge variant="outline">{project.category.name}</Badge>
-                  )}
-                  {filledCustomFields.map(({ field, value }) => (
-                    <Badge key={field.id} variant="secondary">
-                      {field.name}：{value}
+                    <CardAction className="flex items-center gap-1">
+                      {selectionMode ? (
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleProjectSelection(project.id)}
+                          aria-label={`選取「${project.title}」`}
+                        />
+                      ) : (
+                        <>
+                          <EditProjectDialog
+                            project={project}
+                            members={members}
+                            categories={categories}
+                          />
+                          <DeleteProjectDialog project={project} />
+                        </>
+                      )}
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant={statusVariant[project.status] ?? "default"}>
+                      {statusLabel[project.status] ?? project.status}
                     </Badge>
-                  ))}
-                  {project.assignee && (
-                    <Badge variant="outline">負責人：{project.assignee.name}</Badge>
-                  )}
-                </CardContent>
-                <CardFooter className="text-xs text-muted-foreground">
-                  {project.tasks.length} 項任務 · 更新於{" "}
-                  {new Intl.DateTimeFormat("zh-TW", {
-                    dateStyle: "medium",
-                  }).format(project.updatedAt)}
-                </CardFooter>
-              </Card>
-            )
-          })}
-        </div>
+                    {project.category && (
+                      <Badge variant="outline">{project.category.name}</Badge>
+                    )}
+                    {filledCustomFields.map(({ field, value }) => (
+                      <Badge key={field.id} variant="secondary">
+                        {field.name}：{value}
+                      </Badge>
+                    ))}
+                    {project.assignee && (
+                      <Badge variant="outline">負責人：{project.assignee.name}</Badge>
+                    )}
+                  </CardContent>
+                  <CardFooter className="text-xs text-muted-foreground">
+                    {project.tasks.length} 項任務 · 更新於{" "}
+                    {new Intl.DateTimeFormat("zh-TW", {
+                      dateStyle: "medium",
+                    }).format(project.updatedAt)}
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-xl border lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-16">ID</TableHead>
+                  <TableHead>標題</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead>類型／欄位</TableHead>
+                  <TableHead>負責人</TableHead>
+                  <TableHead className="text-right">任務</TableHead>
+                  <TableHead>更新於</TableHead>
+                  <TableHead className="w-20 text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProjects.map((project) => {
+                  const filledCustomFields = (project.category?.fields ?? []).flatMap((field) => {
+                    const value = project.customFieldValues?.[field.id]
+                    return value ? [{ field, value }] : []
+                  })
+                  const isSelected = selectedIds.has(project.id)
+
+                  return (
+                    <TableRow key={project.id} data-state={isSelected ? "selected" : undefined}>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {project.id}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{project.title}</span>
+                          {project.description && (
+                            <span className="line-clamp-1 text-xs text-muted-foreground">
+                              {project.description}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant[project.status] ?? "default"}>
+                          {statusLabel[project.status] ?? project.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {project.category && (
+                            <Badge variant="outline">{project.category.name}</Badge>
+                          )}
+                          {filledCustomFields.map(({ field, value }) => (
+                            <Badge key={field.id} variant="secondary">
+                              {field.name}：{value}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {project.assignee?.name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {project.tasks.length}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Intl.DateTimeFormat("zh-TW", {
+                          dateStyle: "medium",
+                        }).format(project.updatedAt)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-0.5">
+                          {selectionMode ? (
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleProjectSelection(project.id)}
+                              aria-label={`選取「${project.title}」`}
+                            />
+                          ) : (
+                            <>
+                              <EditProjectDialog
+                                project={project}
+                                members={members}
+                                categories={categories}
+                              />
+                              <DeleteProjectDialog project={project} />
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       {selectionMode && selectedIds.size > 0 && (

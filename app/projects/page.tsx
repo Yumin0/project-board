@@ -15,7 +15,6 @@ export default async function ProjectsPage() {
         category: { include: { fields: { orderBy: { order: "asc" } } } },
         tasks: { select: { id: true, status: true } },
       },
-      orderBy: { updatedAt: "desc" },
     }),
     prisma.member.findMany({ orderBy: { name: "asc" } }),
     prisma.category.findMany({
@@ -24,10 +23,14 @@ export default async function ProjectsPage() {
     }),
   ])
 
-  const projectsWithTypedFields = projects.map((project) => ({
-    ...project,
-    customFieldValues: project.customFieldValues as Record<string, string> | null,
-  }))
+  const projectsWithTypedFields = projects
+    .map((project) => ({
+      ...project,
+      customFieldValues: project.customFieldValues as Record<string, string> | null,
+    }))
+    // ids are sequential integers stored as text, so a plain string sort would
+    // order "10" before "2" — sort numerically instead
+    .sort((a, b) => Number(a.id) - Number(b.id))
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6 sm:p-10">
@@ -45,6 +48,13 @@ export default async function ProjectsPage() {
             render={<Link href="/categories" />}
           >
             管理類別
+          </Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/members" />}
+          >
+            管理成員
           </Button>
           <Button
             variant="outline"
