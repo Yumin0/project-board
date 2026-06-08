@@ -187,3 +187,110 @@ export async function deleteIncomeRecord(id: string) {
 
   revalidatePath("/accounts")
 }
+
+const transferSchema = z
+  .object({
+    fromAccountId: z.string().trim().min(1, "請選擇轉出帳戶"),
+    toAccountId: z.string().trim().min(1, "請選擇轉入帳戶"),
+    amount: z.coerce.number().int("請輸入整數金額").positive("金額需大於 0"),
+    date: z
+      .string()
+      .trim()
+      .min(1, "請選擇日期")
+      .refine((value) => !Number.isNaN(Date.parse(value)), "請輸入有效的日期"),
+    name: z.string().trim().max(100).optional(),
+    note: z.string().trim().max(500).optional(),
+    projectId: z.string().trim().optional(),
+  })
+  .refine((value) => value.fromAccountId !== value.toAccountId, {
+    message: "轉出與轉入帳戶不可相同",
+    path: ["toAccountId"],
+  })
+
+export type TransferFormState = {
+  status: "idle" | "success" | "error"
+  error?: string
+  fieldErrors?: Partial<
+    Record<"fromAccountId" | "toAccountId" | "amount" | "date" | "name" | "note" | "projectId", string[]>
+  >
+}
+
+function parseTransferForm(formData: FormData) {
+  const projectId = formData.get("projectId")
+
+  return transferSchema.safeParse({
+    fromAccountId: formData.get("fromAccountId"),
+    toAccountId: formData.get("toAccountId"),
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+    name: formData.get("name") ?? "",
+    note: formData.get("note") ?? "",
+    projectId: projectId === NO_PROJECT ? "" : projectId ?? "",
+  })
+}
+
+export async function createTransfer(
+  _prevState: TransferFormState,
+  formData: FormData
+): Promise<TransferFormState> {
+  const parsed = parseTransferForm(formData)
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: parsed.error.flatten().fieldErrors }
+  }
+
+  await prisma.transfer.create({
+    data: {
+      fromAccountId: parsed.data.fromAccountId,
+      toAccountId: parsed.data.toAccountId,
+      amount: parsed.data.amount,
+      date: new Date(parsed.data.date),
+      name: parsed.data.name || null,
+      note: parsed.data.note || null,
+      projectId: parsed.data.projectId || null,
+    },
+  })
+
+  revalidatePath("/accounts")
+  return { status: "success" }
+}
+
+export async function updateTransfer(
+  id: string,
+  _prevState: TransferFormState,
+  formData: FormData
+): Promise<TransferFormState> {
+  const parsed = parseTransferForm(formData)
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: parsed.error.flatten().fieldErrors }
+  }
+
+  try {
+    await prisma.transfer.update({
+      where: { id },
+      data: {
+        fromAccountId: parsed.data.fromAccountId,
+        toAccountId: parsed.data.toAccountId,
+        amount: parsed.data.amount,
+        date: new Date(parsed.data.date),
+        name: parsed.data.name || null,
+        note: parsed.data.note || null,
+        projectId: parsed.data.projectId || null,
+      },
+    })
+  } catch {
+    return { status: "error", error: "找不到此轉帳紀錄，可能已被刪除" }
+  }
+
+  revalidatePath("/accounts")
+  return { status: "success" }
+}
+
+export async function deleteTransfer(id: string) {
+  try {
+    await prisma.transfer.delete({ where: { id } })
+  } catch {
+    // already deleted — nothing to do
+  }
+
+  revalidatePath("/accounts")
+}

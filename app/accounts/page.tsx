@@ -15,6 +15,20 @@ export default async function AccountsPage() {
           include: { project: { select: { id: true, title: true } } },
           orderBy: { date: "desc" },
         },
+        transfersOut: {
+          include: {
+            project: { select: { id: true, title: true } },
+            toAccount: { select: { id: true, name: true } },
+          },
+          orderBy: { date: "desc" },
+        },
+        transfersIn: {
+          include: {
+            project: { select: { id: true, title: true } },
+            fromAccount: { select: { id: true, name: true } },
+          },
+          orderBy: { date: "desc" },
+        },
       },
       orderBy: { id: "asc" },
     }),
