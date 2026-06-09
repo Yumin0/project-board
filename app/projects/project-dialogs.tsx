@@ -178,13 +178,21 @@ export function DeleteProjectDialog({ project }: { project: Project }) {
 
 const batchEditInitialState: BatchEditState = { status: "idle" }
 
+type SelectedProjectForBatch = {
+  id: string
+  categoryId: string | null
+  status: string
+  assigneeIds: string[]
+  customFieldValues: Record<string, string>
+}
+
 function BatchEditForm({
   selectedProjects,
   members,
   categories,
   onSuccess,
 }: {
-  selectedProjects: { id: string; categoryId: string | null }[]
+  selectedProjects: SelectedProjectForBatch[]
   members: Member[]
   categories: Category[]
   onSuccess?: () => void
@@ -196,11 +204,37 @@ function BatchEditForm({
   )
 
   const [enableStatus, setEnableStatus] = useState(false)
-  const [status, setStatus] = useState("not_started")
+  const [status, setStatus] = useState(() => {
+    if (selectedProjects.length === 0) return "not_started"
+    const first = selectedProjects[0].status
+    return selectedProjects.every((p) => p.status === first) ? first : "not_started"
+  })
   const [enableAssignee, setEnableAssignee] = useState(false)
-  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(new Set())
+  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(() => {
+    if (selectedProjects.length === 0) return new Set()
+    const firstSorted = [...selectedProjects[0].assigneeIds].sort().join(",")
+    const allSame = selectedProjects.every(
+      (p) => [...p.assigneeIds].sort().join(",") === firstSorted
+    )
+    return allSame ? new Set(selectedProjects[0].assigneeIds) : new Set()
+  })
   const [enabledFields, setEnabledFields] = useState<Record<string, boolean>>({})
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() => {
+    const result: Record<string, string> = {}
+    if (selectedProjects.length === 0) return result
+    const firstCategoryId = selectedProjects[0].categoryId
+    if (!firstCategoryId) return result
+    if (selectedProjects.some((p) => p.categoryId !== firstCategoryId)) return result
+    const category = categories.find((c) => c.id === firstCategoryId)
+    if (!category) return result
+    for (const field of category.fields) {
+      const first = selectedProjects[0].customFieldValues[field.id] ?? ""
+      if (selectedProjects.every((p) => (p.customFieldValues[field.id] ?? "") === first)) {
+        result[field.id] = first
+      }
+    }
+    return result
+  })
 
   useEffect(() => {
     if (state.status === "success") {
@@ -419,7 +453,7 @@ export function BatchEditDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  selectedProjects: { id: string; categoryId: string | null }[]
+  selectedProjects: SelectedProjectForBatch[]
   members: Member[]
   categories: Category[]
   onSuccess?: () => void

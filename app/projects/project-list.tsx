@@ -570,6 +570,9 @@ export function ProjectList({
         selectedProjects={selectedProjects.map((project) => ({
           id: project.id,
           categoryId: project.categoryId,
+          status: project.status,
+          assigneeIds: project.assignees.map((a) => a.id),
+          customFieldValues: project.customFieldValues ?? {},
         }))}
         members={members}
         categories={categories}
