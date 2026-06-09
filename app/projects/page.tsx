@@ -13,7 +13,17 @@ export default async function ProjectsPage() {
       include: {
         assignees: { select: { id: true, name: true } },
         category: { include: { fields: { orderBy: { order: "asc" } } } },
-        tasks: { select: { id: true, status: true } },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueDate: true,
+            assigneeId: true,
+            assignee: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     }),
     prisma.member.findMany({ orderBy: { name: "asc" } }),

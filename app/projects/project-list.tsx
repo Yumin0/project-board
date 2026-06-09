@@ -1,7 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { ListChecksIcon, SearchIcon, XIcon } from "lucide-react"
+import { Fragment, useMemo, useRef, useState, useTransition } from "react"
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ListChecksIcon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,6 +56,15 @@ type Category = {
   fields: CategoryField[]
 }
 
+type Task = {
+  id: string
+  title: string
+  status: string
+  dueDate: Date | null
+  assigneeId: string | null
+  assignee: { id: string; name: string } | null
+}
+
 type Project = {
   id: string
   title: string
@@ -57,7 +75,7 @@ type Project = {
   status: string
   updatedAt: Date
   assignees: { id: string; name: string }[]
-  tasks: { id: string; status: string }[]
+  tasks: Task[]
 }
 
 type Member = {
@@ -116,6 +134,12 @@ export function ProjectList({
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchEditOpen, setBatchEditOpen] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({})
+  const [addingTaskForProject, setAddingTaskForProject] = useState<string | null>(null)
+  const [newTaskTitle, setNewTaskTitle] = useState("")
+  const [, startTransition] = useTransition()
+  const addInputRef = useRef<HTMLInputElement>(null)
 
   const filterableFields = useMemo(() => {
     if (filters.categoryId === FILTER_ALL || filters.categoryId === FILTER_UNCATEGORIZED) {
@@ -214,6 +238,96 @@ export function ProjectList({
     setBatchEditOpen(false)
     setSelectedIds(new Set())
     setSelectionMode(false)
+  }
+
+  function getProjectTasks(project: Project): Task[] {
+    return tasksByProject[project.id] ?? project.tasks
+  }
+
+  async function toggleExpand(project: Project) {
+    const next = new Set(expandedIds)
+    if (next.has(project.id)) {
+      next.delete(project.id)
+      setExpandedIds(next)
+      return
+    }
+    next.add(project.id)
+    setExpandedIds(next)
+    // Refresh tasks from server when opening
+    try {
+      const res = await fetch(`/api/projects/${project.id}/tasks`)
+      if (res.ok) {
+        const tasks: Task[] = await res.json()
+        setTasksByProject((prev) => ({ ...prev, [project.id]: tasks }))
+      }
+    } catch {
+      // keep stale data from SSR
+    }
+  }
+
+  async function toggleTaskStatus(projectId: string, task: Task) {
+    const newStatus = task.status === "done" ? "todo" : "done"
+    // Optimistic update
+    setTasksByProject((prev) => ({
+      ...prev,
+      [projectId]: (prev[projectId] ?? []).map((t) =>
+        t.id === task.id ? { ...t, status: newStatus } : t
+      ),
+    }))
+    try {
+      await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+    } catch {
+      // revert on error
+      setTasksByProject((prev) => ({
+        ...prev,
+        [projectId]: (prev[projectId] ?? []).map((t) =>
+          t.id === task.id ? { ...t, status: task.status } : t
+        ),
+      }))
+    }
+  }
+
+  async function deleteTask(projectId: string, taskId: string) {
+    setTasksByProject((prev) => ({
+      ...prev,
+      [projectId]: (prev[projectId] ?? []).filter((t) => t.id !== taskId),
+    }))
+    await fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
+  }
+
+  async function submitNewTask(projectId: string) {
+    const title = newTaskTitle.trim()
+    if (!title) { setAddingTaskForProject(null); setNewTaskTitle(""); return }
+    setAddingTaskForProject(null)
+    setNewTaskTitle("")
+    try {
+      const res = await fetch(`/api/projects/${projectId}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+      if (res.ok) {
+        const task: Task = await res.json()
+        setTasksByProject((prev) => ({
+          ...prev,
+          [projectId]: [...(prev[projectId] ?? []), task],
+        }))
+      }
+    } catch {
+      // silently fail
+    }
+  }
+
+  function startAddingTask(projectId: string) {
+    setAddingTaskForProject(projectId)
+    setNewTaskTitle("")
+    startTransition(() => {
+      setTimeout(() => addInputRef.current?.focus(), 50)
+    })
   }
 
   if (projects.length === 0) {
@@ -444,7 +558,11 @@ export function ProjectList({
                     )}
                   </CardContent>
                   <CardFooter className="text-xs text-muted-foreground">
-                    {project.tasks.length} 項任務 · 更新於{" "}
+                    {(() => {
+                      const t = getProjectTasks(project)
+                      const done = t.filter((x) => x.status === "done").length
+                      return t.length > 0 ? `${done}/${t.length} 項任務` : "無任務"
+                    })()} · 更新於{" "}
                     {new Intl.DateTimeFormat("zh-TW", {
                       dateStyle: "medium",
                     }).format(project.updatedAt)}
@@ -476,72 +594,173 @@ export function ProjectList({
                   })
                   const isSelected = selectedIds.has(project.id)
 
+                  const tasks = getProjectTasks(project)
+                  const doneCount = tasks.filter((t) => t.status === "done").length
+                  const isExpanded = expandedIds.has(project.id)
+
                   return (
-                    <TableRow key={project.id} data-state={isSelected ? "selected" : undefined}>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
-                        {project.id}
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">{project.title}</span>
-                          {project.description && (
-                            <span className="line-clamp-1 text-xs text-muted-foreground">
-                              {project.description}
+                    <Fragment key={project.id}>
+                      <TableRow data-state={isSelected ? "selected" : undefined}>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => toggleExpand(project)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              aria-label={isExpanded ? "收起任務" : "展開任務"}
+                            >
+                              {isExpanded
+                                ? <ChevronDownIcon className="size-3.5" />
+                                : <ChevronRightIcon className="size-3.5" />}
+                            </button>
+                            {project.id}
+                          </div>
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium">{project.title}</span>
+                            {project.description && (
+                              <span className="line-clamp-1 text-xs text-muted-foreground">
+                                {project.description}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={statusVariant[project.status] ?? "default"}>
+                            {statusLabel[project.status] ?? project.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {project.category && (
+                              <Badge variant="outline">{project.category.name}</Badge>
+                            )}
+                            {filledCustomFields.map(({ field, value }) => (
+                              <Badge key={field.id} variant="secondary">
+                                {field.name}：{value}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {project.assignees.length > 0
+                            ? project.assignees.map((a) => a.name).join("、")
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-sm tabular-nums">
+                          {tasks.length > 0 ? (
+                            <span className={cn(doneCount === tasks.length && "text-green-600 dark:text-green-500")}>
+                              {doneCount}/{tasks.length}
                             </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant[project.status] ?? "default"}>
-                          {statusLabel[project.status] ?? project.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {project.category && (
-                            <Badge variant="outline">{project.category.name}</Badge>
-                          )}
-                          {filledCustomFields.map(({ field, value }) => (
-                            <Badge key={field.id} variant="secondary">
-                              {field.name}：{value}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {project.assignees.length > 0
-                          ? project.assignees.map((a) => a.name).join("、")
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {project.tasks.length}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Intl.DateTimeFormat("zh-TW", {
-                          dateStyle: "medium",
-                        }).format(project.updatedAt)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-0.5">
-                          {selectionMode ? (
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => toggleProjectSelection(project.id)}
-                              aria-label={`選取「${project.title}」`}
-                            />
-                          ) : (
-                            <>
-                              <EditProjectDialog
-                                project={project}
-                                members={members}
-                                categories={categories}
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {new Intl.DateTimeFormat("zh-TW", {
+                            dateStyle: "medium",
+                          }).format(project.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-0.5">
+                            {selectionMode ? (
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleProjectSelection(project.id)}
+                                aria-label={`選取「${project.title}」`}
                               />
-                              <DeleteProjectDialog project={project} />
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                            ) : (
+                              <>
+                                <EditProjectDialog
+                                  project={project}
+                                  members={members}
+                                  categories={categories}
+                                />
+                                <DeleteProjectDialog project={project} />
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={8} className="p-0">
+                            <div className="border-t bg-muted/30 px-4 py-2">
+                              {tasks.length === 0 && addingTaskForProject !== project.id && (
+                                <p className="py-2 text-xs text-muted-foreground">尚無任務</p>
+                              )}
+                              <div className="flex flex-col divide-y divide-border/50">
+                                {tasks.map((task) => (
+                                  <div
+                                    key={task.id}
+                                    className="group flex items-center gap-3 py-1.5 pl-6"
+                                  >
+                                    <button
+                                      onClick={() => toggleTaskStatus(project.id, task)}
+                                      className={cn(
+                                        "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                                        task.status === "done"
+                                          ? "border-green-600 bg-green-600 text-white dark:border-green-500 dark:bg-green-500"
+                                          : "border-muted-foreground/40 hover:border-muted-foreground"
+                                      )}
+                                      aria-label={task.status === "done" ? "標記為未完成" : "標記為完成"}
+                                    >
+                                      {task.status === "done" && <CheckIcon className="size-2.5 stroke-[3]" />}
+                                    </button>
+                                    <span className={cn(
+                                      "flex-1 text-sm",
+                                      task.status === "done" && "text-muted-foreground line-through"
+                                    )}>
+                                      {task.title}
+                                    </span>
+                                    {task.dueDate && (
+                                      <span className="text-xs text-muted-foreground tabular-nums">
+                                        {new Intl.DateTimeFormat("zh-TW", { dateStyle: "short" }).format(new Date(task.dueDate))}
+                                      </span>
+                                    )}
+                                    {task.assignee && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {task.assignee.name}
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => deleteTask(project.id, task.id)}
+                                      className="hidden size-5 items-center justify-center rounded text-muted-foreground/50 hover:text-destructive group-hover:flex"
+                                      aria-label="刪除任務"
+                                    >
+                                      <Trash2Icon className="size-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              {addingTaskForProject === project.id ? (
+                                <div className="flex items-center gap-2 py-1.5 pl-6">
+                                  <div className="size-4 shrink-0 rounded-full border border-muted-foreground/40" />
+                                  <input
+                                    ref={addInputRef}
+                                    value={newTaskTitle}
+                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") submitNewTask(project.id)
+                                      if (e.key === "Escape") { setAddingTaskForProject(null); setNewTaskTitle("") }
+                                    }}
+                                    onBlur={() => submitNewTask(project.id)}
+                                    placeholder="輸入任務名稱，按 Enter 確認"
+                                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                                  />
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => startAddingTask(project.id)}
+                                  className="mt-1 flex items-center gap-1.5 py-1 pl-6 text-xs text-muted-foreground/60 hover:text-muted-foreground"
+                                >
+                                  <PlusIcon className="size-3" />
+                                  新增任務
+                                </button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
                   )
                 })}
               </TableBody>
