@@ -10,7 +10,7 @@ import { DeleteMemberDialog, EditMemberDialog } from "./member-dialogs"
 type Member = {
   id: string
   name: string
-  _count: { projects: number }
+  _count: { assignedProjects: number }
 }
 
 export function MemberList({ members }: { members: Member[] }) {
@@ -33,7 +33,7 @@ export function MemberList({ members }: { members: Member[] }) {
             <CardTitle>{member.name}</CardTitle>
             <CardDescription>
               <span className="font-mono">#{member.id}</span> ·{" "}
-              {member._count.projects} 個專案由此成員負責
+              {member._count.assignedProjects} 個專案由此成員負責
             </CardDescription>
             <CardAction className="flex gap-1">
               <EditMemberDialog member={member} />

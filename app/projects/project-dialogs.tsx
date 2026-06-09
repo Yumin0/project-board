@@ -51,7 +51,7 @@ type Project = {
   categoryId: string | null
   customFieldValues: Record<string, string> | null
   status: string
-  assigneeId: string | null
+  assignees: { id: string; name: string }[]
 }
 
 type Member = {
@@ -65,7 +65,6 @@ type Category = {
   fields: { id: string; name: string; type: string; options: string[] }[]
 }
 
-const BATCH_UNASSIGNED = "__unassigned__"
 const SELECT_FIELD_EMPTY = "__empty__"
 
 const statusLabel: Record<string, string> = {
@@ -133,7 +132,7 @@ export function EditProjectDialog({
           <DialogTitle>編輯專案</DialogTitle>
         </DialogHeader>
         <ProjectForm
-          project={project}
+          project={{ ...project, assigneeIds: project.assignees.map((a) => a.id) }}
           members={members}
           categories={categories}
           action={boundUpdate}
@@ -199,7 +198,7 @@ function BatchEditForm({
   const [enableStatus, setEnableStatus] = useState(false)
   const [status, setStatus] = useState("not_started")
   const [enableAssignee, setEnableAssignee] = useState(false)
-  const [assigneeId, setAssigneeId] = useState(BATCH_UNASSIGNED)
+  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(new Set())
   const [enabledFields, setEnabledFields] = useState<Record<string, boolean>>({})
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
 
@@ -278,34 +277,48 @@ function BatchEditForm({
             <Label htmlFor={`${formId}-enable-assignee`} className="cursor-pointer">
               <Checkbox
                 id={`${formId}-enable-assignee`}
-                name="enable_assigneeId"
+                name="enable_assigneeIds"
                 checked={enableAssignee}
                 onCheckedChange={setEnableAssignee}
               />
               更新負責人
             </Label>
-            <Select
-              name="assigneeId"
-              value={assigneeId}
-              onValueChange={(value) => setAssigneeId(value ?? BATCH_UNASSIGNED)}
-              disabled={!enableAssignee}
+            {/* Hidden inputs carry the selected assignee IDs into FormData */}
+            {Array.from(assigneeIds).map((id) => (
+              <input key={id} type="hidden" name="assigneeIds" value={id} />
+            ))}
+            <div
+              className={`flex flex-col gap-2 rounded-md border p-2 transition-opacity ${!enableAssignee ? "pointer-events-none opacity-40" : ""}`}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="選擇負責人">
-                  {(value: string) =>
-                    members.find((member) => member.id === value)?.name ?? "未指派"
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={BATCH_UNASSIGNED}>未指派</SelectItem>
-                {members.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {members.map((member) => (
+                <Label
+                  key={member.id}
+                  htmlFor={`${formId}-batch-assignee-${member.id}`}
+                  className="flex cursor-pointer items-center gap-2 font-normal"
+                >
+                  <Checkbox
+                    id={`${formId}-batch-assignee-${member.id}`}
+                    checked={assigneeIds.has(member.id)}
+                    onCheckedChange={(checked) =>
+                      setAssigneeIds((prev) => {
+                        const next = new Set(prev)
+                        if (checked) next.add(member.id)
+                        else next.delete(member.id)
+                        return next
+                      })
+                    }
+                    disabled={!enableAssignee}
+                  />
+                  {member.name}
+                </Label>
+              ))}
+              {members.length === 0 && (
+                <p className="text-xs text-muted-foreground">尚無可指派的成員</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              未勾選任何成員表示清除所有負責人
+            </p>
           </div>
 
           {sharedCategory && sharedCategory.fields.length > 0 && (

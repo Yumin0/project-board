@@ -14,20 +14,22 @@ const projectSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   categoryId: z.string().trim().optional(),
   status: z.enum(["not_started", "in_progress", "completed"]),
-  assigneeId: z.string().trim().optional(),
+  assigneeIds: z.array(z.string().trim()).default([]),
 })
 
 export type ProjectFormState = {
   status: "idle" | "success" | "error"
   error?: string
   fieldErrors?: Partial<
-    Record<"title" | "description" | "categoryId" | "status" | "assigneeId", string[]>
+    Record<"title" | "description" | "categoryId" | "status" | "assigneeIds", string[]>
   >
   customFieldErrors?: Record<string, string>
 }
 
 function parseProjectForm(formData: FormData) {
-  const assigneeId = formData.get("assigneeId")
+  const rawAssigneeIds = formData.getAll("assigneeIds").filter(
+    (id): id is string => typeof id === "string" && id.length > 0
+  )
   const categoryId = formData.get("categoryId")
 
   return projectSchema.safeParse({
@@ -35,7 +37,7 @@ function parseProjectForm(formData: FormData) {
     description: formData.get("description") ?? "",
     categoryId: categoryId === "__uncategorized__" ? "" : categoryId ?? "",
     status: formData.get("status") || "not_started",
-    assigneeId: assigneeId === "__unassigned__" ? "" : assigneeId ?? "",
+    assigneeIds: rawAssigneeIds,
   })
 }
 
@@ -108,7 +110,9 @@ export async function createProject(
       categoryId,
       customFieldValues: customFieldValues ?? Prisma.DbNull,
       status: parsed.data.status,
-      assigneeId: parsed.data.assigneeId || null,
+      assignees: parsed.data.assigneeIds.length > 0
+        ? { connect: parsed.data.assigneeIds.map((id) => ({ id })) }
+        : undefined,
     },
   })
 
@@ -143,7 +147,7 @@ export async function updateProject(
         categoryId,
         customFieldValues: customFieldValues ?? Prisma.DbNull,
         status: parsed.data.status,
-        assigneeId: parsed.data.assigneeId || null,
+        assignees: { set: parsed.data.assigneeIds.map((id) => ({ id })) },
       },
     })
   } catch {
@@ -193,10 +197,11 @@ export async function batchUpdateProjects(
     sharedData.status = parsed.data
   }
 
-  if (formData.get("enable_assigneeId") === "on") {
-    const raw = formData.get("assigneeId")
-    const assigneeId = raw === "__unassigned__" ? "" : typeof raw === "string" ? raw.trim() : ""
-    sharedData.assignee = assigneeId ? { connect: { id: assigneeId } } : { disconnect: true }
+  if (formData.get("enable_assigneeIds") === "on") {
+    const rawIds = formData
+      .getAll("assigneeIds")
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
+    sharedData.assignees = { set: rawIds.map((id) => ({ id })) }
   }
 
   // Custom fields live in a per-project JSON map keyed by field id, and field

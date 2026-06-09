@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useId, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DialogClose, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,7 +39,7 @@ type ProjectFormValues = {
   categoryId: string | null
   customFieldValues: Record<string, string> | null
   status: string
-  assigneeId: string | null
+  assigneeIds: string[]
 }
 
 type Member = {
@@ -46,7 +47,6 @@ type Member = {
   name: string
 }
 
-const UNASSIGNED = "__unassigned__"
 const UNCATEGORIZED = "__uncategorized__"
 const SELECT_FIELD_EMPTY = "__empty__"
 
@@ -81,6 +81,9 @@ export function ProjectForm({
     initialState
   )
   const [categoryId, setCategoryId] = useState(project?.categoryId ?? UNCATEGORIZED)
+  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(
+    new Set(project?.assigneeIds ?? [])
+  )
 
   useEffect(() => {
     if (state.status === "success") {
@@ -93,6 +96,15 @@ export function ProjectForm({
     () => categories.find((category) => category.id === categoryId),
     [categories, categoryId]
   )
+
+  function toggleAssignee(memberId: string, checked: boolean) {
+    setAssigneeIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(memberId)
+      else next.delete(memberId)
+      return next
+    })
+  }
 
   return (
     <form id={formId} action={formAction} className="flex flex-col gap-4">
@@ -214,27 +226,31 @@ export function ProjectForm({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${formId}-assigneeId`}>負責人</Label>
-        <Select
-          name="assigneeId"
-          defaultValue={project?.assigneeId ?? UNASSIGNED}
-        >
-          <SelectTrigger id={`${formId}-assigneeId`} className="w-full">
-            <SelectValue placeholder="選擇負責人">
-              {(value: string) =>
-                members.find((member) => member.id === value)?.name ?? "未指派"
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={UNASSIGNED}>未指派</SelectItem>
+        <Label>負責人</Label>
+        {/* Hidden inputs carry the selected IDs into FormData */}
+        {Array.from(assigneeIds).map((id) => (
+          <input key={id} type="hidden" name="assigneeIds" value={id} />
+        ))}
+        {members.length === 0 ? (
+          <p className="text-sm text-muted-foreground">尚無可指派的成員</p>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-lg border p-3">
             {members.map((member) => (
-              <SelectItem key={member.id} value={member.id}>
+              <Label
+                key={member.id}
+                htmlFor={`${formId}-assignee-${member.id}`}
+                className="flex cursor-pointer items-center gap-2 font-normal"
+              >
+                <Checkbox
+                  id={`${formId}-assignee-${member.id}`}
+                  checked={assigneeIds.has(member.id)}
+                  onCheckedChange={(checked) => toggleAssignee(member.id, !!checked)}
+                />
                 {member.name}
-              </SelectItem>
+              </Label>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

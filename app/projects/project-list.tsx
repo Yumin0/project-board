@@ -56,8 +56,7 @@ type Project = {
   customFieldValues: Record<string, string> | null
   status: string
   updatedAt: Date
-  assigneeId: string | null
-  assignee: { id: string; name: string } | null
+  assignees: { id: string; name: string }[]
   tasks: { id: string; status: string }[]
 }
 
@@ -147,8 +146,11 @@ export function ProjectList({
       }
 
       if (filters.assigneeId === FILTER_UNASSIGNED) {
-        if (project.assigneeId) return false
-      } else if (filters.assigneeId !== FILTER_ALL && project.assigneeId !== filters.assigneeId) {
+        if (project.assignees.length > 0) return false
+      } else if (
+        filters.assigneeId !== FILTER_ALL &&
+        !project.assignees.some((a) => a.id === filters.assigneeId)
+      ) {
         return false
       }
 
@@ -435,8 +437,10 @@ export function ProjectList({
                         {field.name}：{value}
                       </Badge>
                     ))}
-                    {project.assignee && (
-                      <Badge variant="outline">負責人：{project.assignee.name}</Badge>
+                    {project.assignees.length > 0 && (
+                      <Badge variant="outline">
+                        負責人：{project.assignees.map((a) => a.name).join("、")}
+                      </Badge>
                     )}
                   </CardContent>
                   <CardFooter className="text-xs text-muted-foreground">
@@ -505,7 +509,9 @@ export function ProjectList({
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {project.assignee?.name ?? "—"}
+                        {project.assignees.length > 0
+                          ? project.assignees.map((a) => a.name).join("、")
+                          : "—"}
                       </TableCell>
                       <TableCell className="text-right text-sm tabular-nums">
                         {project.tasks.length}

@@ -13,7 +13,7 @@ export async function GET(
 
   const project = await prisma.project.findUnique({
     where: { id },
-    include: { assignee: true, tasks: true },
+    include: { assignees: true, tasks: true },
   })
 
   if (!project) {
@@ -44,10 +44,9 @@ export async function PATCH(
       data.customFieldValues = body.customFieldValues ?? Prisma.DbNull
     }
     if (body.status !== undefined) data.status = body.status
-    if (body.assigneeId !== undefined) {
-      data.assignee = body.assigneeId
-        ? { connect: { id: body.assigneeId } }
-        : { disconnect: true }
+    if (body.assigneeIds !== undefined) {
+      const ids: string[] = Array.isArray(body.assigneeIds) ? body.assigneeIds : []
+      data.assignees = { set: ids.map((id) => ({ id })) }
     }
 
     const project = await prisma.project.update({

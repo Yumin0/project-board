@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 export default async function MembersPage() {
   const members = await prisma.member.findMany({
-    include: { _count: { select: { projects: true } } },
+    include: { _count: { select: { assignedProjects: true } } },
   })
   // ids are sequential integers stored as text, so a plain string sort would
   // order "10" before "2" — sort numerically instead

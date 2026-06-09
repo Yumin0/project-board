@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const projects = await prisma.project.findMany({
       include: {
-        assignee: true,
+        assignees: true,
         tasks: true,
       },
       orderBy: {
@@ -44,7 +44,9 @@ export async function POST(request: Request) {
         categoryId: body.categoryId || null,
         customFieldValues: body.customFieldValues ?? Prisma.DbNull,
         status: body.status || undefined,
-        assigneeId: body.assigneeId || null,
+        assignees: body.assigneeIds?.length
+          ? { connect: (body.assigneeIds as string[]).map((id: string) => ({ id })) }
+          : undefined,
       },
     })
     return NextResponse.json(project, { status: 201 })
