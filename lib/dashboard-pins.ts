@@ -115,3 +115,13 @@ export async function setPin(category: DashboardCategory, projectId: string) {
 export async function clearPin(category: DashboardCategory) {
   await prisma.dashboardPin.deleteMany({ where: { category } })
 }
+
+/** Creates a new in-progress project in the given category and pins it. */
+export async function createAndPinProject(category: DashboardCategory, title: string) {
+  const project = await prisma.project.create({
+    data: { title, dashboardCategory: category, status: "in_progress" },
+    select: { id: true },
+  })
+  await setPin(category, project.id)
+  return project
+}

@@ -47,9 +47,19 @@ export default async function HomePage() {
     if (!Component) return null
     return (
       <div key={w.widgetType} className="flex flex-col gap-3">
-        <h2 className="font-heading text-lg font-semibold" style={{ color: "#2c3150" }}>
-          {widgetTitle(w)}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-heading text-lg font-semibold" style={{ color: "#2c3150" }}>
+            {widgetTitle(w)}
+          </h2>
+          {w.widgetType === "recent_projects" && (
+            <Link
+              href="/projects"
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              管理專案 →
+            </Link>
+          )}
+        </div>
         <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
           <Component />
         </Suspense>

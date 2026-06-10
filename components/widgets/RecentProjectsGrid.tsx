@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import {
   DASHBOARD_CATEGORIES,
@@ -171,6 +172,8 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [pendingId, setPendingId] = useState<string | null>(null)
+  const [newTitle, setNewTitle] = useState("")
+  const [creatingPin, setCreatingPin] = useState(false)
   const [highlightCat, setHighlightCat] = useState<DashboardCategory | null>(null)
   const cardRefs = useRef<Partial<Record<DashboardCategory, HTMLButtonElement | null>>>({})
 
@@ -180,11 +183,13 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
   function closePicker() {
     setActiveCat(null)
     setCandidates([])
+    setNewTitle("")
   }
 
   async function openPicker(cat: DashboardCategory) {
     setActiveCat(cat)
     setCandidates([])
+    setNewTitle("")
     setLoadingCandidates(true)
     try {
       const res = await fetch(`/api/dashboard/pins/${cat}`)
@@ -223,6 +228,29 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
       focusNextEmpty(newGrid, justHandled)
     } finally {
       setPendingId(null)
+    }
+  }
+
+  async function handleCreateAndPin() {
+    if (!activeCat) return
+    const title = newTitle.trim()
+    if (!title) return
+
+    setCreatingPin(true)
+    try {
+      await fetch(`/api/dashboard/pins/${activeCat}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+      const res = await fetch("/api/dashboard/pins")
+      const newGrid: GridEntry[] = await res.json()
+      const justHandled = activeCat
+      setGrid(newGrid)
+      closePicker()
+      focusNextEmpty(newGrid, justHandled)
+    } finally {
+      setCreatingPin(false)
     }
   }
 
@@ -308,6 +336,25 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
                 )
               })}
           </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleCreateAndPin()
+            }}
+            className="flex items-center gap-2 border-t pt-3"
+          >
+            <Input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder={`新增${activeLabel}專案…`}
+              disabled={creatingPin}
+            />
+            <Button type="submit" size="sm" disabled={creatingPin || newTitle.trim() === ""}>
+              {creatingPin ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              新增並釘選
+            </Button>
+          </form>
 
           {activeEntry?.project && (
             <DialogFooter>

@@ -2,10 +2,12 @@
 // API route for managing the pinned project of a single dashboard category
 
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import {
   ProjectCategoryMismatchError,
   ProjectNotFoundError,
   clearPin,
+  createAndPinProject,
   getPinnableProjects,
   isDashboardCategory,
   setPin,
@@ -58,6 +60,31 @@ export async function PUT(
   }
 
   return NextResponse.json({ ok: true })
+}
+
+// POST: create a new in-progress project in this category and pin it
+export async function POST(
+  request: Request,
+  ctx: RouteContext<"/api/dashboard/pins/[category]">
+) {
+  const { category } = await ctx.params
+  if (!isDashboardCategory(category)) {
+    return NextResponse.json({ error: "Invalid category" }, { status: 400 })
+  }
+
+  const body = await request.json()
+  const title = typeof body?.title === "string" ? body.title.trim() : ""
+  if (!title) {
+    return NextResponse.json({ error: "title is required" }, { status: 400 })
+  }
+  if (title.length > 200) {
+    return NextResponse.json({ error: "title is too long" }, { status: 400 })
+  }
+
+  const project = await createAndPinProject(category, title)
+  revalidatePath("/projects")
+
+  return NextResponse.json({ ok: true, project })
 }
 
 // DELETE: clear whatever project is pinned to this category
