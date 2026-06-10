@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, CalendarDays, Check, Loader2, Pin, Plus } from "lucide-react"
+import { ArrowRight, CalendarDays, Check, GripVertical, Loader2, Pin, Plus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import type { PinnedDashboardProject } from "@/lib/dashboard-pins"
 
 type GridEntry = { cat: DashboardCategory; project: PinnedDashboardProject | null }
 type Candidate = { id: string; title: string }
-type DashboardTask = { id: string; title: string; status: string; dueDate: string | null }
+type DashboardTask = { id: string; title: string; status: string; dueDate: string | null; order: number }
 
 const FONT_FAMILY = '"Noto Sans TC", var(--font-sans), system-ui, sans-serif'
 const CARD_BASE = "flex h-full w-full flex-col gap-2.5 rounded-[22px] p-3.5 text-left"
@@ -58,16 +58,25 @@ function computeProjectStats(tasks: DashboardTask[]) {
   }
 }
 
-/** Sorts incomplete tasks first (soonest due date, then undated) with completed tasks last. */
+/** Sorts incomplete tasks first (in manual order) with completed tasks last. */
 function sortTasksForDisplay(tasks: DashboardTask[]) {
   return [...tasks].sort((a, b) => {
     if (a.status === "done" && b.status !== "done") return 1
     if (a.status !== "done" && b.status === "done") return -1
-    if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-    if (a.dueDate) return -1
-    if (b.dueDate) return 1
-    return 0
+    return a.order - b.order
   })
+}
+
+/** Moves the dragged task to the position of the target task within the list. */
+function reorderTasks(tasks: DashboardTask[], draggedId: string, targetId: string) {
+  if (draggedId === targetId) return tasks
+  const draggedIndex = tasks.findIndex((t) => t.id === draggedId)
+  const targetIndex = tasks.findIndex((t) => t.id === targetId)
+  if (draggedIndex === -1 || targetIndex === -1) return tasks
+  const next = [...tasks]
+  const [dragged] = next.splice(draggedIndex, 1)
+  next.splice(targetIndex, 0, dragged)
+  return next.map((t, i) => ({ ...t, order: i }))
 }
 
 function CategoryChip({ cat }: { cat: DashboardCategory }) {
@@ -248,6 +257,11 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
   const [addingTask, setAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState("")
   const newTaskInputRef = useRef<HTMLInputElement | null>(null)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState("")
+  const editingInputRef = useRef<HTMLInputElement | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
 
   const activeEntry = grid.find((g) => g.cat === activeCat)
   const activeLabel = activeCat ? DASHBOARD_CATEGORY_LABELS[activeCat] : ""
@@ -368,6 +382,63 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
         setTasks(newTasks)
         applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
       }
+    } catch {
+      // silently fail
+    }
+  }
+
+  function startEditingTask(task: DashboardTask) {
+    setEditingTaskId(task.id)
+    setEditingTitle(task.title)
+    setTimeout(() => editingInputRef.current?.focus(), 50)
+  }
+
+  function cancelEditingTask() {
+    setEditingTaskId(null)
+    setEditingTitle("")
+  }
+
+  async function saveTaskEdit() {
+    if (!taskDialogCat || !editingTaskId) return
+    const taskId = editingTaskId
+    const title = editingTitle.trim()
+    const original = tasks.find((t) => t.id === taskId)
+    setEditingTaskId(null)
+    if (!original || !title || title === original.title) return
+
+    const newTasks = tasks.map((t) => (t.id === taskId ? { ...t, title } : t))
+    setTasks(newTasks)
+    applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+    } catch {
+      // silently fail
+    }
+  }
+
+  function handleTaskDragEnd() {
+    setDraggedTaskId(null)
+    setDragOverTaskId(null)
+  }
+
+  async function handleTaskDrop(targetTaskId: string) {
+    const sourceTaskId = draggedTaskId
+    setDraggedTaskId(null)
+    setDragOverTaskId(null)
+    if (!sourceTaskId || !taskDialogProject || sourceTaskId === targetTaskId) return
+
+    const reordered = reorderTasks(sortedTasks, sourceTaskId, targetTaskId)
+    setTasks(reordered)
+    try {
+      await fetch(`/api/projects/${taskDialogProject.id}/tasks`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskIds: reordered.map((t) => t.id) }),
+      })
     } catch {
       // silently fail
     }
@@ -581,8 +652,33 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
                 const isDone = task.status === "done"
                 const due = formatDue(task.dueDate)
                 const style = taskDialogCat ? DASHBOARD_CATEGORY_STYLES[taskDialogCat] : null
+                const isEditing = editingTaskId === task.id
                 return (
-                  <div key={task.id} className="flex items-center gap-3 py-1.5">
+                  <div
+                    key={task.id}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      if (dragOverTaskId !== task.id) setDragOverTaskId(task.id)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      handleTaskDrop(task.id)
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md py-1.5 transition-colors",
+                      draggedTaskId === task.id && "opacity-40",
+                      dragOverTaskId === task.id && draggedTaskId !== task.id && "bg-muted/60"
+                    )}
+                  >
+                    <span
+                      draggable
+                      onDragStart={() => setDraggedTaskId(task.id)}
+                      onDragEnd={handleTaskDragEnd}
+                      className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 active:cursor-grabbing"
+                      aria-label="拖曳調整順序"
+                    >
+                      <GripVertical className="size-3.5" />
+                    </span>
                     <button
                       type="button"
                       onClick={() => toggleTask(task)}
@@ -600,12 +696,34 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
                         isDone && <Check className="size-2.5 stroke-[3] text-white" />
                       )}
                     </button>
-                    <span
-                      className={cn("flex-1 text-sm", isDone && "text-muted-foreground line-through")}
-                      style={{ color: isDone ? undefined : "#2c3150" }}
-                    >
-                      {task.title}
-                    </span>
+                    {isEditing ? (
+                      <Input
+                        ref={editingInputRef}
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onBlur={saveTaskEdit}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            saveTaskEdit()
+                          } else if (e.key === "Escape") {
+                            cancelEditingTask()
+                          }
+                        }}
+                        className="h-7 flex-1 border-none bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                      />
+                    ) : (
+                      <span
+                        onClick={() => startEditingTask(task)}
+                        className={cn(
+                          "flex-1 cursor-text text-sm",
+                          isDone && "text-muted-foreground line-through"
+                        )}
+                        style={{ color: isDone ? undefined : "#2c3150" }}
+                      >
+                        {task.title}
+                      </span>
+                    )}
                     {due && <span className="text-xs text-muted-foreground tabular-nums">{due}</span>}
                   </div>
                 )
