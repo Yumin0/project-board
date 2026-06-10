@@ -38,13 +38,22 @@ export default async function HomePage() {
   const calendarWidget = enabled.find((w) => w.widgetType === "monthly_calendar")
   const mainWidgets = enabled.filter((w) => w.widgetType !== "monthly_calendar")
 
+  function widgetTitle(w: (typeof enabled)[number]) {
+    return w.title || WIDGET_REGISTRY.find((r) => r.widgetType === w.widgetType)?.defaultTitle || ""
+  }
+
   function renderWidget(w: (typeof enabled)[number]) {
     const Component = WIDGET_COMPONENTS[w.widgetType]
     if (!Component) return null
     return (
-      <Suspense key={w.widgetType} fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
-        <Component />
-      </Suspense>
+      <div key={w.widgetType} className="flex flex-col gap-3">
+        <h2 className="font-heading text-lg font-semibold" style={{ color: "#2c3150" }}>
+          {widgetTitle(w)}
+        </h2>
+        <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
+          <Component />
+        </Suspense>
+      </div>
     )
   }
 

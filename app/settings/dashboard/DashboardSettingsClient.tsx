@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation"
 import { GripVertical } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 type Widget = {
   id: string
   widgetType: string
+  title: string | null
   position: number
   enabled: boolean
 }
@@ -16,6 +19,7 @@ type Widget = {
 type RegistryEntry = {
   widgetType: string
   label: string
+  defaultTitle: string
 }
 
 export default function DashboardSettingsClient({
@@ -35,9 +39,18 @@ export default function DashboardSettingsClient({
   const labelOf = (type: string) =>
     registry.find((r) => r.widgetType === type)?.label ?? type
 
+  const defaultTitleOf = (type: string) =>
+    registry.find((r) => r.widgetType === type)?.defaultTitle ?? type
+
   function toggleEnabled(widgetType: string) {
     setWidgets((prev) =>
       prev.map((w) => (w.widgetType === widgetType ? { ...w, enabled: !w.enabled } : w))
+    )
+  }
+
+  function setTitle(widgetType: string, title: string) {
+    setWidgets((prev) =>
+      prev.map((w) => (w.widgetType === widgetType ? { ...w, title } : w))
     )
   }
 
@@ -72,6 +85,7 @@ export default function DashboardSettingsClient({
             widgetType: w.widgetType,
             position: w.position,
             enabled: w.enabled,
+            title: w.title,
           }))
         ),
       })
@@ -92,24 +106,38 @@ export default function DashboardSettingsClient({
             onDragEnd={onDragEnd}
             className={dragging === w.widgetType ? "opacity-40" : ""}
           >
-            <CardContent className="flex items-center gap-3 py-3">
-              <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-              <span className="flex-1 text-sm font-medium">{labelOf(w.widgetType)}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={w.enabled}
-                onClick={() => toggleEnabled(w.widgetType)}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  w.enabled ? "bg-primary" : "bg-input"
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${
-                    w.enabled ? "translate-x-4" : "translate-x-0"
+            <CardContent className="flex flex-col gap-2.5 py-3">
+              <div className="flex items-center gap-3">
+                <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                <span className="flex-1 text-sm font-medium">{labelOf(w.widgetType)}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={w.enabled}
+                  onClick={() => toggleEnabled(w.widgetType)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    w.enabled ? "bg-primary" : "bg-input"
                   }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${
+                      w.enabled ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 pl-7">
+                <Label htmlFor={`title-${w.widgetType}`} className="shrink-0 text-xs text-muted-foreground">
+                  顯示標題
+                </Label>
+                <Input
+                  id={`title-${w.widgetType}`}
+                  value={w.title ?? ""}
+                  placeholder={defaultTitleOf(w.widgetType)}
+                  onChange={(e) => setTitle(w.widgetType, e.target.value)}
+                  className="h-8 text-sm"
                 />
-              </button>
+              </div>
             </CardContent>
           </Card>
         ))}

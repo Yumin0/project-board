@@ -152,6 +152,7 @@ model DashboardPin {
 model DashboardWidget {
   id         String   @id @default(dbgenerated("nextval('dashboard_widgets_id_seq')::text"))
   widgetType String   @unique
+  title      String?
   position   Int
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
