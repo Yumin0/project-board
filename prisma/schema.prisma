@@ -36,6 +36,11 @@ model Project {
   category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   customFieldValues Json?
 
+  // Dashboard quadrant this project belongs to: main / side / life / learn.
+  // Distinct from `category` above (which is the client/custom-field grouping).
+  dashboardCategory String   @default("side")
+  dashboardPin      DashboardPin?
+
   tasks         Task[]
   incomeRecords IncomeRecord[]
   transfers     Transfer[]
@@ -127,6 +132,21 @@ model CategoryField {
 
   @@unique([categoryId, name])
   @@map("category_fields")
+}
+
+// Tracks which single project is pinned to each of the four fixed dashboard
+// quadrants (main / side / life / learn). At most one pin per category, and
+// at most one category per project, both enforced via @unique below.
+model DashboardPin {
+  id        String   @id @default(dbgenerated("nextval('dashboard_pins_id_seq')::text"))
+  category  String   @unique // main | side | life | learn
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("dashboard_pins")
 }
 
 model DashboardWidget {
