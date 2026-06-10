@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, CalendarDays, Check, Loader2, Plus } from "lucide-react"
+import { ArrowRight, CalendarDays, Check, Loader2, Pin, Plus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -23,9 +23,52 @@ import type { PinnedDashboardProject } from "@/lib/dashboard-pins"
 
 type GridEntry = { cat: DashboardCategory; project: PinnedDashboardProject | null }
 type Candidate = { id: string; title: string }
+type DashboardTask = { id: string; title: string; status: string; dueDate: string | null }
 
 const FONT_FAMILY = '"Noto Sans TC", var(--font-sans), system-ui, sans-serif'
 const CARD_BASE = "flex h-full w-full flex-col gap-2.5 rounded-[22px] p-3.5 text-left"
+
+function formatDue(dateStr: string | null): string | null {
+  if (!dateStr) return null
+  const date = new Date(dateStr)
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return `${mm} / ${dd}`
+}
+
+/** Mirrors the server-side progress/next-task derivation in lib/dashboard-pins.ts. */
+function computeProjectStats(tasks: DashboardTask[]) {
+  const total = tasks.length
+  const done = tasks.filter((t) => t.status === "done").length
+  const progress = total === 0 ? 0 : Math.round((done / total) * 100)
+
+  const next = tasks
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => {
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      if (a.dueDate) return -1
+      if (b.dueDate) return 1
+      return 0
+    })[0]
+
+  return {
+    progress,
+    nextTask: next?.title ?? null,
+    due: formatDue(next?.dueDate ?? null),
+  }
+}
+
+/** Sorts incomplete tasks first (soonest due date, then undated) with completed tasks last. */
+function sortTasksForDisplay(tasks: DashboardTask[]) {
+  return [...tasks].sort((a, b) => {
+    if (a.status === "done" && b.status !== "done") return 1
+    if (a.status !== "done" && b.status === "done") return -1
+    if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    if (a.dueDate) return -1
+    if (b.dueDate) return 1
+    return 0
+  })
+}
 
 function CategoryChip({ cat }: { cat: DashboardCategory }) {
   const style = DASHBOARD_CATEGORY_STYLES[cat]
@@ -50,18 +93,27 @@ function CategoryChip({ cat }: { cat: DashboardCategory }) {
 function ProjectCard({
   cat,
   project,
+  onOpenTasks,
   onManage,
 }: {
   cat: DashboardCategory
   project: PinnedDashboardProject
+  onOpenTasks: () => void
   onManage: () => void
 }) {
   const style = DASHBOARD_CATEGORY_STYLES[cat]
   return (
-    <button
-      type="button"
-      onClick={onManage}
-      className={cn(CARD_BASE, "transition-transform hover:-translate-y-0.5")}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenTasks}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpenTasks()
+        }
+      }}
+      className={cn(CARD_BASE, "relative cursor-pointer transition-transform hover:-translate-y-0.5")}
       style={{
         background: `linear-gradient(150deg, ${style.tint}, rgba(255,255,255,.42))`,
         backdropFilter: "blur(22px) saturate(140%)",
@@ -70,6 +122,18 @@ function ProjectCard({
         boxShadow: "0 10px 34px rgba(70,78,120,.12), inset 0 1px 0 rgba(255,255,255,.6)",
       }}
     >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onManage()
+        }}
+        className="absolute right-2.5 top-2.5 flex size-6 items-center justify-center rounded-full transition-colors hover:bg-white/60"
+        style={{ color: "rgba(70,78,120,.45)" }}
+        aria-label="更換或取消釘選專案"
+      >
+        <Pin className="size-3.5" />
+      </button>
       <CategoryChip cat={cat} />
       <p className="flex-1 text-[14.5px] leading-[1.3] font-semibold" style={{ color: "#2c3150" }}>
         {project.name}
@@ -109,7 +173,7 @@ function ProjectCard({
           <span>預計 {project.due}</span>
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -177,8 +241,20 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
   const [highlightCat, setHighlightCat] = useState<DashboardCategory | null>(null)
   const cardRefs = useRef<Partial<Record<DashboardCategory, HTMLButtonElement | null>>>({})
 
+  const [taskDialogCat, setTaskDialogCat] = useState<DashboardCategory | null>(null)
+  const [tasks, setTasks] = useState<DashboardTask[]>([])
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
+  const [addingTask, setAddingTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState("")
+  const newTaskInputRef = useRef<HTMLInputElement | null>(null)
+
   const activeEntry = grid.find((g) => g.cat === activeCat)
   const activeLabel = activeCat ? DASHBOARD_CATEGORY_LABELS[activeCat] : ""
+
+  const taskDialogEntry = grid.find((g) => g.cat === taskDialogCat)
+  const taskDialogProject = taskDialogEntry?.project ?? null
+  const sortedTasks = sortTasksForDisplay(tasks)
 
   function closePicker() {
     setActiveCat(null)
@@ -209,6 +285,92 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
     setHighlightCat(next.cat)
     requestAnimationFrame(() => cardRefs.current[next.cat]?.focus())
     setTimeout(() => setHighlightCat((c) => (c === next.cat ? null : c)), 1600)
+  }
+
+  function applyProjectStats(cat: DashboardCategory, stats: ReturnType<typeof computeProjectStats>) {
+    setGrid((prev) =>
+      prev.map((g) => (g.cat === cat && g.project ? { ...g, project: { ...g.project, ...stats } } : g))
+    )
+  }
+
+  function closeTaskDialog() {
+    setTaskDialogCat(null)
+    setTasks([])
+    setAddingTask(false)
+    setNewTaskTitle("")
+  }
+
+  async function openTaskDialog(cat: DashboardCategory) {
+    const entry = grid.find((g) => g.cat === cat)
+    if (!entry?.project) return
+    setTaskDialogCat(cat)
+    setTasks([])
+    setAddingTask(false)
+    setNewTaskTitle("")
+    setLoadingTasks(true)
+    try {
+      const res = await fetch(`/api/projects/${entry.project.id}/tasks`)
+      const data: DashboardTask[] = await res.json()
+      setTasks(data)
+    } finally {
+      setLoadingTasks(false)
+    }
+  }
+
+  async function toggleTask(task: DashboardTask) {
+    if (!taskDialogCat) return
+    const previousTasks = tasks
+    const newStatus = task.status === "done" ? "todo" : "done"
+    const newTasks = tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))
+
+    setTasks(newTasks)
+    applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
+    setTogglingTaskId(task.id)
+    try {
+      await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+    } catch {
+      setTasks(previousTasks)
+      applyProjectStats(taskDialogCat, computeProjectStats(previousTasks))
+    } finally {
+      setTogglingTaskId(null)
+    }
+  }
+
+  function startAddingTask() {
+    setAddingTask(true)
+    setNewTaskTitle("")
+    setTimeout(() => newTaskInputRef.current?.focus(), 50)
+  }
+
+  async function submitNewTask() {
+    if (!taskDialogCat || !taskDialogProject) return
+    const title = newTaskTitle.trim()
+    if (!title) {
+      setAddingTask(false)
+      setNewTaskTitle("")
+      return
+    }
+    setAddingTask(false)
+    setNewTaskTitle("")
+    try {
+      const res = await fetch(`/api/projects/${taskDialogProject.id}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+      if (res.ok) {
+        const task: DashboardTask = await res.json()
+        const newTasks = [...tasks, task]
+        setTasks(newTasks)
+        applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
+      }
+    } catch {
+      // silently fail
+    }
   }
 
   async function handlePin(projectId: string) {
@@ -278,7 +440,13 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
         {grid.map(({ cat, project }) =>
           project ? (
-            <ProjectCard key={cat} cat={cat} project={project} onManage={() => openPicker(cat)} />
+            <ProjectCard
+              key={cat}
+              cat={cat}
+              project={project}
+              onOpenTasks={() => openTaskDialog(cat)}
+              onManage={() => openPicker(cat)}
+            />
           ) : (
             <EmptyPinCard
               key={cat}
@@ -363,6 +531,123 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={taskDialogCat !== null} onOpenChange={(open) => !open && closeTaskDialog()}>
+        <DialogContent style={{ fontFamily: FONT_FAMILY }}>
+          <DialogHeader>
+            <DialogTitle>{taskDialogProject?.name ?? ""}</DialogTitle>
+            <DialogDescription>勾選任務即可標記完成，進度與下一步會即時更新。</DialogDescription>
+          </DialogHeader>
+
+          {taskDialogCat && taskDialogProject && (
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <CategoryChip cat={taskDialogCat} />
+                <span
+                  className="text-[12px] font-semibold"
+                  style={{ color: DASHBOARD_CATEGORY_STYLES[taskDialogCat].ink }}
+                >
+                  {taskDialogProject.progress}% 完成
+                </span>
+              </div>
+              <div className="h-[7px] w-full rounded-full" style={{ background: "rgba(120,128,170,.14)" }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${taskDialogProject.progress}%`,
+                    background: `linear-gradient(90deg, ${DASHBOARD_CATEGORY_STYLES[taskDialogCat].a}, ${DASHBOARD_CATEGORY_STYLES[taskDialogCat].b})`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto py-1">
+            {loadingTasks && (
+              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                載入中…
+              </div>
+            )}
+            {!loadingTasks && sortedTasks.length === 0 && !addingTask && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                還沒有任務，新增第一個作為下一步吧
+              </p>
+            )}
+            {!loadingTasks &&
+              sortedTasks.map((task) => {
+                const isDone = task.status === "done"
+                const due = formatDue(task.dueDate)
+                const style = taskDialogCat ? DASHBOARD_CATEGORY_STYLES[taskDialogCat] : null
+                return (
+                  <div key={task.id} className="flex items-center gap-3 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleTask(task)}
+                      disabled={togglingTaskId === task.id}
+                      className={cn(
+                        "flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors",
+                        !isDone && "border-[rgba(120,128,170,.35)] hover:border-[rgba(120,128,170,.6)]"
+                      )}
+                      style={isDone && style ? { background: `linear-gradient(135deg, ${style.a}, ${style.b})`, borderColor: style.a } : undefined}
+                      aria-label={isDone ? "標記為未完成" : "標記為完成"}
+                    >
+                      {togglingTaskId === task.id ? (
+                        <Loader2 className="size-2.5 animate-spin text-white" />
+                      ) : (
+                        isDone && <Check className="size-2.5 stroke-[3] text-white" />
+                      )}
+                    </button>
+                    <span
+                      className={cn("flex-1 text-sm", isDone && "text-muted-foreground line-through")}
+                      style={{ color: isDone ? undefined : "#2c3150" }}
+                    >
+                      {task.title}
+                    </span>
+                    {due && <span className="text-xs text-muted-foreground tabular-nums">{due}</span>}
+                  </div>
+                )
+              })}
+          </div>
+
+          <div className="border-t pt-2.5">
+            {addingTask ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  submitNewTask()
+                }}
+                className="flex items-center gap-2"
+              >
+                <div className="size-[18px] shrink-0 rounded-full border border-[rgba(120,128,170,.35)]" />
+                <Input
+                  ref={newTaskInputRef}
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onBlur={submitNewTask}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setAddingTask(false)
+                      setNewTaskTitle("")
+                    }
+                  }}
+                  placeholder="輸入任務名稱，按 Enter 確認"
+                  className="h-8 flex-1 border-none bg-transparent px-0 shadow-none focus-visible:ring-0"
+                />
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={startAddingTask}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground"
+              >
+                <Plus className="size-3.5" />
+                新增任務
+              </button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
