@@ -4,30 +4,30 @@ import { prisma } from "@/lib/prisma"
 export const WIDGET_REGISTRY = [
   { widgetType: "recent_projects", label: "近期進行中的專案" },
   { widgetType: "monthly_revenue", label: "收入月累計曲線圖" },
+  { widgetType: "monthly_calendar", label: "本月行事曆" },
 ] as const
 
 export type WidgetType = (typeof WIDGET_REGISTRY)[number]["widgetType"]
-
-async function seedDefaults() {
-  const data = WIDGET_REGISTRY.map((w, i) => ({
-    widgetType: w.widgetType,
-    position: i,
-    enabled: true,
-  }))
-  await prisma.dashboardWidget.createMany({ data, skipDuplicates: true })
-}
 
 export async function GET() {
   try {
     let widgets = await prisma.dashboardWidget.findMany({
       orderBy: { position: "asc" },
     })
-    if (widgets.length === 0) {
-      await seedDefaults()
-      widgets = await prisma.dashboardWidget.findMany({
-        orderBy: { position: "asc" },
-      })
+
+    const existingTypes = new Set(widgets.map((w) => w.widgetType))
+    const missing = WIDGET_REGISTRY.filter((w) => !existingTypes.has(w.widgetType))
+    if (missing.length > 0) {
+      const nextPosition = widgets.reduce((max, w) => Math.max(max, w.position + 1), 0)
+      const data = missing.map((w, i) => ({
+        widgetType: w.widgetType,
+        position: nextPosition + i,
+        enabled: true,
+      }))
+      await prisma.dashboardWidget.createMany({ data, skipDuplicates: true })
+      widgets = await prisma.dashboardWidget.findMany({ orderBy: { position: "asc" } })
     }
+
     return NextResponse.json(widgets)
   } catch (error) {
     console.error("Error fetching dashboard config:", error)

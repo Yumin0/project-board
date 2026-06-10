@@ -160,6 +160,20 @@ model DashboardWidget {
   @@map("dashboard_widgets")
 }
 
+// Daily check-in marking which dashboard categories (main / side / life /
+// learn) the user invested time in on a given day. Drives the monthly
+// calendar widget on the homepage.
+model WorkLog {
+  id       String   @id @default(dbgenerated("nextval('work_logs_id_seq')::text"))
+  date     DateTime @db.Date
+  category String // main | side | life | learn
+
+  createdAt DateTime @default(now())
+
+  @@unique([date, category])
+  @@map("work_logs")
+}
+
 model Task {
   id        String     @id @default(dbgenerated("nextval('tasks_id_seq')::text"))
   title     String

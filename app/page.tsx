@@ -6,12 +6,14 @@ import { WIDGET_REGISTRY } from "@/app/api/dashboard/route"
 import { Button } from "@/components/ui/button"
 import RecentProjectsWidget from "@/components/widgets/RecentProjectsWidget"
 import MonthlyRevenueWidget from "@/components/widgets/MonthlyRevenueWidget"
+import CalendarWidget from "@/components/widgets/CalendarWidget"
 
 export const dynamic = "force-dynamic"
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   recent_projects: RecentProjectsWidget,
   monthly_revenue: MonthlyRevenueWidget,
+  monthly_calendar: CalendarWidget,
 }
 
 export default async function HomePage() {
@@ -19,10 +21,13 @@ export default async function HomePage() {
     orderBy: { position: "asc" },
   })
 
-  if (widgets.length === 0) {
-    const data = WIDGET_REGISTRY.map((w, i) => ({
+  const existingTypes = new Set(widgets.map((w) => w.widgetType))
+  const missing = WIDGET_REGISTRY.filter((w) => !existingTypes.has(w.widgetType))
+  if (missing.length > 0) {
+    const nextPosition = widgets.reduce((max, w) => Math.max(max, w.position + 1), 0)
+    const data = missing.map((w, i) => ({
       widgetType: w.widgetType,
-      position: i,
+      position: nextPosition + i,
       enabled: true,
     }))
     await prisma.dashboardWidget.createMany({ data, skipDuplicates: true })
@@ -30,6 +35,18 @@ export default async function HomePage() {
   }
 
   const enabled = widgets.filter((w) => w.enabled)
+  const calendarWidget = enabled.find((w) => w.widgetType === "monthly_calendar")
+  const mainWidgets = enabled.filter((w) => w.widgetType !== "monthly_calendar")
+
+  function renderWidget(w: (typeof enabled)[number]) {
+    const Component = WIDGET_COMPONENTS[w.widgetType]
+    if (!Component) return null
+    return (
+      <Suspense key={w.widgetType} fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
+        <Component />
+      </Suspense>
+    )
+  }
 
   return (
     <div
@@ -51,7 +68,7 @@ export default async function HomePage() {
         }}
       />
 
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-6 p-6 sm:p-10">
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-6 p-6 sm:p-10 lg:max-w-6xl">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-2xl font-semibold">首頁</h1>
@@ -62,16 +79,13 @@ export default async function HomePage() {
           </Button>
         </div>
 
-        <div className="flex flex-col gap-6">
-          {enabled.map((w) => {
-            const Component = WIDGET_COMPONENTS[w.widgetType]
-            if (!Component) return null
-            return (
-              <Suspense key={w.widgetType} fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
-                <Component />
-              </Suspense>
-            )
-          })}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_336px] lg:items-start">
+          <div className="flex flex-col gap-6">
+            {mainWidgets.slice(0, 2).map(renderWidget)}
+            {calendarWidget && <div className="lg:hidden">{renderWidget(calendarWidget)}</div>}
+            {mainWidgets.slice(2).map(renderWidget)}
+          </div>
+          {calendarWidget && <div className="hidden lg:block">{renderWidget(calendarWidget)}</div>}
         </div>
       </div>
     </div>
