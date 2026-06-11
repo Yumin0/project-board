@@ -97,6 +97,16 @@ export function ProjectForm({
     [categories, categoryId]
   )
 
+  const isSideBusiness = selectedCategory?.name === "副業"
+
+  useEffect(() => {
+    if (!isSideBusiness) {
+      const yumin = members.find((member) => member.name === "Yumin")
+      setAssigneeIds(yumin ? new Set([yumin.id]) : new Set())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSideBusiness])
+
   function toggleAssignee(memberId: string, checked: boolean) {
     setAssigneeIds((prev) => {
       const next = new Set(prev)
@@ -225,33 +235,35 @@ export function ProjectForm({
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <Label>負責人</Label>
-        {/* Hidden inputs carry the selected IDs into FormData */}
-        {Array.from(assigneeIds).map((id) => (
-          <input key={id} type="hidden" name="assigneeIds" value={id} />
-        ))}
-        {members.length === 0 ? (
-          <p className="text-sm text-muted-foreground">尚無可指派的成員</p>
-        ) : (
-          <div className="flex flex-col gap-2 rounded-lg border p-3">
-            {members.map((member) => (
-              <Label
-                key={member.id}
-                htmlFor={`${formId}-assignee-${member.id}`}
-                className="flex cursor-pointer items-center gap-2 font-normal"
-              >
-                <Checkbox
-                  id={`${formId}-assignee-${member.id}`}
-                  checked={assigneeIds.has(member.id)}
-                  onCheckedChange={(checked) => toggleAssignee(member.id, !!checked)}
-                />
-                {member.name}
-              </Label>
-            ))}
-          </div>
-        )}
-      </div>
+      {Array.from(assigneeIds).map((id) => (
+        <input key={id} type="hidden" name="assigneeIds" value={id} />
+      ))}
+
+      {isSideBusiness && (
+        <div className="flex flex-col gap-1.5">
+          <Label>負責人</Label>
+          {members.length === 0 ? (
+            <p className="text-sm text-muted-foreground">尚無可指派的成員</p>
+          ) : (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+              {members.map((member) => (
+                <Label
+                  key={member.id}
+                  htmlFor={`${formId}-assignee-${member.id}`}
+                  className="flex cursor-pointer items-center gap-2 font-normal"
+                >
+                  <Checkbox
+                    id={`${formId}-assignee-${member.id}`}
+                    checked={assigneeIds.has(member.id)}
+                    onCheckedChange={(checked) => toggleAssignee(member.id, !!checked)}
+                  />
+                  {member.name}
+                </Label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${formId}-status`}>狀態</Label>
