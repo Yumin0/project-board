@@ -125,12 +125,17 @@ export function ProjectList({
   projects,
   members,
   categories,
+  initialSearch,
 }: {
   projects: Project[]
   members: Member[]
   categories: CategoryOption[]
+  initialSearch?: string
 }) {
-  const [filters, setFilters] = useState<Filters>(initialFilters)
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...initialFilters,
+    search: initialSearch ?? "",
+  }))
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchEditOpen, setBatchEditOpen] = useState(false)

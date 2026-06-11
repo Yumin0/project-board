@@ -68,17 +68,7 @@ export default async function HomePage() {
   }
 
   return (
-    <div
-      className="relative min-h-screen overflow-hidden"
-      style={{ background: "linear-gradient(155deg, #e5e7ea 0%, #ebedf0 48%, #f1f2f4 100%)" }}
-    >
-      <div
-        className="pointer-events-none absolute -top-20 -left-20 h-80 w-80 rounded-full"
-        style={{
-          background: "radial-gradient(circle, rgba(148,156,174,.16), transparent 70%)",
-          filter: "blur(40px)",
-        }}
-      />
+    <div className="relative min-h-screen overflow-hidden">
       <div
         className="pointer-events-none absolute -right-24 -bottom-24 h-[340px] w-[340px] rounded-full"
         style={{

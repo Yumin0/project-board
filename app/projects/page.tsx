@@ -7,7 +7,12 @@ import { ProjectList } from "./project-list"
 
 export const dynamic = "force-dynamic"
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
+  const { q } = await searchParams
   const [projects, members, categories] = await Promise.all([
     prisma.project.findMany({
       include: {
@@ -81,6 +86,7 @@ export default async function ProjectsPage() {
         projects={projectsWithTypedFields}
         members={members}
         categories={categories}
+        initialSearch={q}
       />
     </div>
   )
