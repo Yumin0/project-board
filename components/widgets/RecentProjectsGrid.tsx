@@ -671,14 +671,7 @@ export default function RecentProjectsGrid({
                 return (
                   <div
                     key={task.id}
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      if (dragOverTaskId !== task.id) setDragOverTaskId(task.id)
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      handleTaskDrop(task.id)
-                    }}
+                    data-task-row-id={task.id}
                     className={cn(
                       "flex items-center gap-2 rounded-md py-1.5 transition-colors",
                       draggedTaskId === task.id && "opacity-40",
@@ -686,9 +679,31 @@ export default function RecentProjectsGrid({
                     )}
                   >
                     <span
-                      draggable
-                      onDragStart={() => setDraggedTaskId(task.id)}
-                      onDragEnd={handleTaskDragEnd}
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        e.currentTarget.setPointerCapture(e.pointerId)
+                        setDraggedTaskId(task.id)
+                      }}
+                      onPointerMove={(e) => {
+                        if (!draggedTaskId) return
+                        const target = document.elementFromPoint(e.clientX, e.clientY)
+                        const row = target?.closest<HTMLElement>("[data-task-row-id]")
+                        const overId = row?.dataset.taskRowId
+                        if (overId && overId !== dragOverTaskId) setDragOverTaskId(overId)
+                      }}
+                      onPointerUp={(e) => {
+                        if (!draggedTaskId) return
+                        const target = document.elementFromPoint(e.clientX, e.clientY)
+                        const row = target?.closest<HTMLElement>("[data-task-row-id]")
+                        const overId = row?.dataset.taskRowId
+                        if (overId) {
+                          handleTaskDrop(overId)
+                        } else {
+                          handleTaskDragEnd()
+                        }
+                      }}
+                      onPointerCancel={handleTaskDragEnd}
+                      style={{ touchAction: "none" }}
                       className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 active:cursor-grabbing"
                       aria-label="拖曳調整順序"
                     >
