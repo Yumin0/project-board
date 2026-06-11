@@ -239,10 +239,16 @@ function EmptyPinCard({
   )
 }
 
-export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridEntry[] }) {
+export default function RecentProjectsGrid({
+  initialGrid,
+  initialCandidates,
+}: {
+  initialGrid: GridEntry[]
+  initialCandidates: Partial<Record<DashboardCategory, Candidate[]>>
+}) {
   const [grid, setGrid] = useState(initialGrid)
   const [activeCat, setActiveCat] = useState<DashboardCategory | null>(null)
-  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [candidatesByCat, setCandidatesByCat] = useState(initialCandidates)
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState("")
@@ -265,6 +271,7 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
 
   const activeEntry = grid.find((g) => g.cat === activeCat)
   const activeLabel = activeCat ? DASHBOARD_CATEGORY_LABELS[activeCat] : ""
+  const candidates = (activeCat ? candidatesByCat[activeCat] : undefined) ?? []
 
   const taskDialogEntry = grid.find((g) => g.cat === taskDialogCat)
   const taskDialogProject = taskDialogEntry?.project ?? null
@@ -272,19 +279,22 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
 
   function closePicker() {
     setActiveCat(null)
-    setCandidates([])
     setNewTitle("")
   }
 
   async function openPicker(cat: DashboardCategory) {
     setActiveCat(cat)
-    setCandidates([])
     setNewTitle("")
+    if (candidatesByCat[cat] !== undefined) {
+      setLoadingCandidates(false)
+      return
+    }
+
     setLoadingCandidates(true)
     try {
       const res = await fetch(`/api/dashboard/pins/${cat}`)
       const data: Candidate[] = await res.json()
-      setCandidates(data)
+      setCandidatesByCat((prev) => ({ ...prev, [cat]: data }))
     } finally {
       setLoadingCandidates(false)
     }
@@ -475,6 +485,11 @@ export default function RecentProjectsGrid({ initialGrid }: { initialGrid: GridE
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
+      })
+      setCandidatesByCat((prev) => {
+        const next = { ...prev }
+        delete next[activeCat]
+        return next
       })
       const res = await fetch("/api/dashboard/pins")
       const newGrid: GridEntry[] = await res.json()
