@@ -1,0 +1,3 @@
+# env files containing secrets - managed via Vercel's environment variables instead
+.env
+.env*.local
