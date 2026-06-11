@@ -14,7 +14,20 @@ export async function GET(
   const [project, members, categories] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
-      include: { assignees: { select: { id: true, name: true } } },
+      include: {
+        assignees: { select: { id: true, name: true } },
+        tasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            dueDate: true,
+            assigneeId: true,
+            assignee: { select: { id: true, name: true } },
+          },
+          orderBy: { order: "asc" },
+        },
+      },
     }),
     prisma.member.findMany({
       select: { id: true, name: true },

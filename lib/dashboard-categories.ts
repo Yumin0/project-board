@@ -27,3 +27,14 @@ export const DASHBOARD_CATEGORY_STYLES: Record<DashboardCategory, DashboardCateg
   life: { a: "#f0a896", b: "#f6cabb", dot: "#ec9b86", ink: "#b05c47", tint: "rgba(236,155,134,.18)" },
   learn: { a: "#eecb7e", b: "#f4dfb0", dot: "#e6bd6b", ink: "#946f2c", tint: "rgba(230,189,107,.20)" },
 }
+
+// Reuses a dashboard quadrant's color when a Category shares its name (e.g. "副業").
+export function getCategoryStyleByName(
+  categoryName: string | null | undefined
+): DashboardCategoryStyle | null {
+  if (!categoryName) return null
+  const match = (Object.entries(DASHBOARD_CATEGORY_LABELS) as [DashboardCategory, string][]).find(
+    ([, label]) => label === categoryName
+  )
+  return match ? DASHBOARD_CATEGORY_STYLES[match[0]] : null
+}
