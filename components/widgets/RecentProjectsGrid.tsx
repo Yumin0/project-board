@@ -3,6 +3,16 @@
 import { useRef, useState } from "react"
 import { ArrowRight, CalendarDays, Check, GripVertical, Loader2, Pin, Plus } from "lucide-react"
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,6 +28,7 @@ import {
   DASHBOARD_CATEGORY_LABELS,
   DASHBOARD_CATEGORY_STYLES,
   type DashboardCategory,
+  type DashboardCategoryStyle,
 } from "@/lib/dashboard-categories"
 import type { PinnedDashboardProject } from "@/lib/dashboard-pins"
 
@@ -77,6 +88,99 @@ function reorderTasks(tasks: DashboardTask[], draggedId: string, targetId: strin
   const [dragged] = next.splice(draggedIndex, 1)
   next.splice(targetIndex, 0, dragged)
   return next.map((t, i) => ({ ...t, order: i }))
+}
+
+function SortableTaskRow({
+  task,
+  style,
+  isEditing,
+  editingTitle,
+  editingInputRef,
+  isToggling,
+  onToggle,
+  onStartEdit,
+  onEditingTitleChange,
+  onSaveEdit,
+  onCancelEdit,
+}: {
+  task: DashboardTask
+  style: DashboardCategoryStyle | null
+  isEditing: boolean
+  editingTitle: string
+  editingInputRef: React.RefObject<HTMLInputElement | null>
+  isToggling: boolean
+  onToggle: () => void
+  onStartEdit: () => void
+  onEditingTitleChange: (value: string) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const isDone = task.status === "done"
+  const due = formatDue(task.dueDate)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex items-center gap-2 rounded-md bg-background py-1.5 transition-colors",
+        isDragging && "z-10 opacity-90 shadow-md"
+      )}
+    >
+      <span
+        {...attributes}
+        {...listeners}
+        className="flex shrink-0 touch-none cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 active:cursor-grabbing"
+        aria-label="拖曳調整順序"
+      >
+        <GripVertical className="size-3.5" />
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={isToggling}
+        className={cn(
+          "flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors",
+          !isDone && "border-[rgba(120,128,170,.35)] hover:border-[rgba(120,128,170,.6)]"
+        )}
+        style={isDone && style ? { background: `linear-gradient(135deg, ${style.a}, ${style.b})`, borderColor: style.a } : undefined}
+        aria-label={isDone ? "標記為未完成" : "標記為完成"}
+      >
+        {isToggling ? (
+          <Loader2 className="size-2.5 animate-spin text-white" />
+        ) : (
+          isDone && <Check className="size-2.5 stroke-[3] text-white" />
+        )}
+      </button>
+      {isEditing ? (
+        <Input
+          ref={editingInputRef}
+          value={editingTitle}
+          onChange={(e) => onEditingTitleChange(e.target.value)}
+          onBlur={onSaveEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              onSaveEdit()
+            } else if (e.key === "Escape") {
+              onCancelEdit()
+            }
+          }}
+          className="h-7 flex-1 border-none bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+        />
+      ) : (
+        <span
+          onClick={onStartEdit}
+          className={cn("flex-1 cursor-text text-sm", isDone && "text-muted-foreground line-through")}
+          style={{ color: isDone ? undefined : "#2c3150" }}
+        >
+          {task.title}
+        </span>
+      )}
+      {due && <span className="text-xs text-muted-foreground tabular-nums">{due}</span>}
+    </div>
+  )
 }
 
 function CategoryChip({ cat }: { cat: DashboardCategory }) {
@@ -266,8 +370,7 @@ export default function RecentProjectsGrid({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
   const editingInputRef = useRef<HTMLInputElement | null>(null)
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
-  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const activeEntry = grid.find((g) => g.cat === activeCat)
   const activeLabel = activeCat ? DASHBOARD_CATEGORY_LABELS[activeCat] : ""
@@ -430,18 +533,11 @@ export default function RecentProjectsGrid({
     }
   }
 
-  function handleTaskDragEnd() {
-    setDraggedTaskId(null)
-    setDragOverTaskId(null)
-  }
+  async function handleTaskDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id || !taskDialogProject) return
 
-  async function handleTaskDrop(targetTaskId: string) {
-    const sourceTaskId = draggedTaskId
-    setDraggedTaskId(null)
-    setDragOverTaskId(null)
-    if (!sourceTaskId || !taskDialogProject || sourceTaskId === targetTaskId) return
-
-    const reordered = reorderTasks(sortedTasks, sourceTaskId, targetTaskId)
+    const reordered = reorderTasks(sortedTasks, String(active.id), String(over.id))
     setTasks(reordered)
     try {
       await fetch(`/api/projects/${taskDialogProject.id}/tasks`, {
@@ -662,102 +758,28 @@ export default function RecentProjectsGrid({
                 還沒有任務，新增第一個作為下一步吧
               </p>
             )}
-            {!loadingTasks &&
-              sortedTasks.map((task) => {
-                const isDone = task.status === "done"
-                const due = formatDue(task.dueDate)
-                const style = taskDialogCat ? DASHBOARD_CATEGORY_STYLES[taskDialogCat] : null
-                const isEditing = editingTaskId === task.id
-                return (
-                  <div
-                    key={task.id}
-                    data-task-row-id={task.id}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md py-1.5 transition-colors",
-                      draggedTaskId === task.id && "opacity-40",
-                      dragOverTaskId === task.id && draggedTaskId !== task.id && "bg-muted/60"
-                    )}
-                  >
-                    <span
-                      onPointerDown={(e) => {
-                        e.preventDefault()
-                        e.currentTarget.setPointerCapture(e.pointerId)
-                        setDraggedTaskId(task.id)
-                      }}
-                      onPointerMove={(e) => {
-                        if (!draggedTaskId) return
-                        const target = document.elementFromPoint(e.clientX, e.clientY)
-                        const row = target?.closest<HTMLElement>("[data-task-row-id]")
-                        const overId = row?.dataset.taskRowId
-                        if (overId && overId !== dragOverTaskId) setDragOverTaskId(overId)
-                      }}
-                      onPointerUp={(e) => {
-                        if (!draggedTaskId) return
-                        const target = document.elementFromPoint(e.clientX, e.clientY)
-                        const row = target?.closest<HTMLElement>("[data-task-row-id]")
-                        const overId = row?.dataset.taskRowId
-                        if (overId) {
-                          handleTaskDrop(overId)
-                        } else {
-                          handleTaskDragEnd()
-                        }
-                      }}
-                      onPointerCancel={handleTaskDragEnd}
-                      style={{ touchAction: "none" }}
-                      className="flex shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 active:cursor-grabbing"
-                      aria-label="拖曳調整順序"
-                    >
-                      <GripVertical className="size-3.5" />
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleTask(task)}
-                      disabled={togglingTaskId === task.id}
-                      className={cn(
-                        "flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors",
-                        !isDone && "border-[rgba(120,128,170,.35)] hover:border-[rgba(120,128,170,.6)]"
-                      )}
-                      style={isDone && style ? { background: `linear-gradient(135deg, ${style.a}, ${style.b})`, borderColor: style.a } : undefined}
-                      aria-label={isDone ? "標記為未完成" : "標記為完成"}
-                    >
-                      {togglingTaskId === task.id ? (
-                        <Loader2 className="size-2.5 animate-spin text-white" />
-                      ) : (
-                        isDone && <Check className="size-2.5 stroke-[3] text-white" />
-                      )}
-                    </button>
-                    {isEditing ? (
-                      <Input
-                        ref={editingInputRef}
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onBlur={saveTaskEdit}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            saveTaskEdit()
-                          } else if (e.key === "Escape") {
-                            cancelEditingTask()
-                          }
-                        }}
-                        className="h-7 flex-1 border-none bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-                      />
-                    ) : (
-                      <span
-                        onClick={() => startEditingTask(task)}
-                        className={cn(
-                          "flex-1 cursor-text text-sm",
-                          isDone && "text-muted-foreground line-through"
-                        )}
-                        style={{ color: isDone ? undefined : "#2c3150" }}
-                      >
-                        {task.title}
-                      </span>
-                    )}
-                    {due && <span className="text-xs text-muted-foreground tabular-nums">{due}</span>}
-                  </div>
-                )
-              })}
+            {!loadingTasks && sortedTasks.length > 0 && (
+              <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                <SortableContext items={sortedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  {sortedTasks.map((task) => (
+                    <SortableTaskRow
+                      key={task.id}
+                      task={task}
+                      style={taskDialogCat ? DASHBOARD_CATEGORY_STYLES[taskDialogCat] : null}
+                      isEditing={editingTaskId === task.id}
+                      editingTitle={editingTitle}
+                      editingInputRef={editingInputRef}
+                      isToggling={togglingTaskId === task.id}
+                      onToggle={() => toggleTask(task)}
+                      onStartEdit={() => startEditingTask(task)}
+                      onEditingTitleChange={setEditingTitle}
+                      onSaveEdit={saveTaskEdit}
+                      onCancelEdit={cancelEditingTask}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
           </div>
 
           <div className="border-t pt-2.5">
