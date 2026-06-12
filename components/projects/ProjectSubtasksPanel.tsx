@@ -1,7 +1,17 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import { CheckIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { CheckIcon, GripVertical, PlusIcon, Trash2Icon } from "lucide-react"
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 import { cn } from "@/lib/utils"
 
@@ -21,6 +31,75 @@ type Task = {
   assignee: { id: string; name: string } | null
 }
 
+function SortableTaskRow({
+  task,
+  onToggle,
+  onDelete,
+}: {
+  task: Task
+  onToggle: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const isDone = task.status === "done"
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "group flex items-center gap-3 px-3.5 py-2.5",
+        isDragging && "z-10 rounded-lg bg-white/70 opacity-90 shadow-md"
+      )}
+    >
+      <span
+        {...attributes}
+        {...listeners}
+        className="flex shrink-0 touch-none items-center justify-center text-[rgba(70,78,120,.3)] active:cursor-grabbing"
+        style={{ cursor: "grab" }}
+        aria-label="拖曳調整順序"
+      >
+        <GripVertical className="size-4" />
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex size-[21px] shrink-0 items-center justify-center rounded-full transition-colors"
+        style={
+          isDone
+            ? { background: "linear-gradient(135deg,#5cb98c,#7fd0a8)" }
+            : { border: `1.6px solid ${CIRCLE_BORDER}` }
+        }
+        aria-label={isDone ? "標記為未完成" : "標記為完成"}
+      >
+        {isDone && <CheckIcon className="size-3 stroke-[3] text-white" />}
+      </button>
+      <span
+        className={cn("flex-1 text-sm", isDone && "line-through")}
+        style={{ color: isDone ? DONE_TEXT : INK }}
+      >
+        {task.title}
+      </span>
+      {(task.dueDate || task.assignee) && (
+        <span className="shrink-0 text-xs tabular-nums" style={{ color: SUBTLE }}>
+          {task.dueDate &&
+            new Intl.DateTimeFormat("zh-TW", { dateStyle: "short" }).format(new Date(task.dueDate))}
+          {task.dueDate && task.assignee && " · "}
+          {task.assignee?.name}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        className="hidden size-5 shrink-0 items-center justify-center rounded text-[rgba(70,78,120,.4)] hover:text-destructive group-hover:flex"
+        aria-label="刪除任務"
+      >
+        <Trash2Icon className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
 export function ProjectSubtasksPanel({
   projectId,
   tasks: initialTasks,
@@ -33,6 +112,7 @@ export function ProjectSubtasksPanel({
   const [newTaskTitle, setNewTaskTitle] = useState("")
   const [, startTransition] = useTransition()
   const addInputRef = useRef<HTMLInputElement>(null)
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const total = tasks.length
   const done = tasks.filter((task) => task.status === "done").length
@@ -59,6 +139,27 @@ export function ProjectSubtasksPanel({
   async function deleteTask(taskId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     await fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = tasks.findIndex((t) => t.id === active.id)
+    const newIndex = tasks.findIndex((t) => t.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(tasks, oldIndex, newIndex)
+    setTasks(reordered)
+    try {
+      await fetch(`/api/projects/${projectId}/tasks`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskIds: reordered.map((t) => t.id) }),
+      })
+    } catch {
+      // silently fail
+    }
   }
 
   async function submitNewTask() {
@@ -132,50 +233,20 @@ export function ProjectSubtasksPanel({
             尚無任務
           </p>
         )}
-        {tasks.map((task) => {
-          const isDone = task.status === "done"
-          return (
-            <div key={task.id} className="group flex items-center gap-3 px-3.5 py-2.5">
-              <button
-                type="button"
-                onClick={() => toggleTaskStatus(task)}
-                className="flex size-[21px] shrink-0 items-center justify-center rounded-full transition-colors"
-                style={
-                  isDone
-                    ? { background: "linear-gradient(135deg,#5cb98c,#7fd0a8)" }
-                    : { border: `1.6px solid ${CIRCLE_BORDER}` }
-                }
-                aria-label={isDone ? "標記為未完成" : "標記為完成"}
-              >
-                {isDone && <CheckIcon className="size-3 stroke-[3] text-white" />}
-              </button>
-              <span
-                className={cn("flex-1 text-sm", isDone && "line-through")}
-                style={{ color: isDone ? DONE_TEXT : INK }}
-              >
-                {task.title}
-              </span>
-              {(task.dueDate || task.assignee) && (
-                <span className="shrink-0 text-xs tabular-nums" style={{ color: SUBTLE }}>
-                  {task.dueDate &&
-                    new Intl.DateTimeFormat("zh-TW", { dateStyle: "short" }).format(
-                      new Date(task.dueDate)
-                    )}
-                  {task.dueDate && task.assignee && " · "}
-                  {task.assignee?.name}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => deleteTask(task.id)}
-                className="hidden size-5 shrink-0 items-center justify-center rounded text-[rgba(70,78,120,.4)] hover:text-destructive group-hover:flex"
-                aria-label="刪除任務"
-              >
-                <Trash2Icon className="size-3.5" />
-              </button>
-            </div>
-          )
-        })}
+        {tasks.length > 0 && (
+          <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              {tasks.map((task) => (
+                <SortableTaskRow
+                  key={task.id}
+                  task={task}
+                  onToggle={() => toggleTaskStatus(task)}
+                  onDelete={() => deleteTask(task.id)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        )}
         {adding ? (
           <div className="flex items-center gap-3 px-3.5 py-2.5">
             <div className="size-[21px] shrink-0 rounded-full" style={{ border: `1.6px solid ${CIRCLE_BORDER}` }} />
