@@ -13,6 +13,7 @@ import {
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 const INK = "#2c3150"
@@ -33,12 +34,26 @@ type Task = {
 
 function SortableTaskRow({
   task,
+  isEditing,
+  editingTitle,
+  editingInputRef,
   onToggle,
   onDelete,
+  onStartEdit,
+  onEditingTitleChange,
+  onSaveEdit,
+  onCancelEdit,
 }: {
   task: Task
+  isEditing: boolean
+  editingTitle: string
+  editingInputRef: React.RefObject<HTMLInputElement | null>
   onToggle: () => void
   onDelete: () => void
+  onStartEdit: () => void
+  onEditingTitleChange: (value: string) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const isDone = task.status === "done"
@@ -74,12 +89,31 @@ function SortableTaskRow({
       >
         {isDone && <CheckIcon className="size-3 stroke-[3] text-white" />}
       </button>
-      <span
-        className={cn("flex-1 text-sm", isDone && "line-through")}
-        style={{ color: isDone ? DONE_TEXT : INK }}
-      >
-        {task.title}
-      </span>
+      {isEditing ? (
+        <Input
+          ref={editingInputRef}
+          value={editingTitle}
+          onChange={(event) => onEditingTitleChange(event.target.value)}
+          onBlur={onSaveEdit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              onSaveEdit()
+            } else if (event.key === "Escape") {
+              onCancelEdit()
+            }
+          }}
+          className="h-7 flex-1 border-none bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+        />
+      ) : (
+        <span
+          onClick={onStartEdit}
+          className={cn("flex-1 cursor-text text-sm", isDone && "line-through")}
+          style={{ color: isDone ? DONE_TEXT : INK }}
+        >
+          {task.title}
+        </span>
+      )}
       {(task.dueDate || task.assignee) && (
         <span className="shrink-0 text-xs tabular-nums" style={{ color: SUBTLE }}>
           {task.dueDate &&
@@ -110,8 +144,11 @@ export function ProjectSubtasksPanel({
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [adding, setAdding] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState("")
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState("")
   const [, startTransition] = useTransition()
   const addInputRef = useRef<HTMLInputElement>(null)
+  const editingInputRef = useRef<HTMLInputElement>(null)
   const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const total = tasks.length
@@ -139,6 +176,37 @@ export function ProjectSubtasksPanel({
   async function deleteTask(taskId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     await fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
+  }
+
+  function startEditingTask(task: Task) {
+    setEditingTaskId(task.id)
+    setEditingTitle(task.title)
+    setTimeout(() => editingInputRef.current?.focus(), 50)
+  }
+
+  function cancelEditingTask() {
+    setEditingTaskId(null)
+    setEditingTitle("")
+  }
+
+  async function saveTaskEdit() {
+    const taskId = editingTaskId
+    if (!taskId) return
+    const title = editingTitle.trim()
+    const original = tasks.find((t) => t.id === taskId)
+    setEditingTaskId(null)
+    if (!original || !title || title === original.title) return
+
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title } : t)))
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+    } catch {
+      // silently fail
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -240,8 +308,15 @@ export function ProjectSubtasksPanel({
                 <SortableTaskRow
                   key={task.id}
                   task={task}
+                  isEditing={editingTaskId === task.id}
+                  editingTitle={editingTitle}
+                  editingInputRef={editingInputRef}
                   onToggle={() => toggleTaskStatus(task)}
                   onDelete={() => deleteTask(task.id)}
+                  onStartEdit={() => startEditingTask(task)}
+                  onEditingTitleChange={setEditingTitle}
+                  onSaveEdit={saveTaskEdit}
+                  onCancelEdit={cancelEditingTask}
                 />
               ))}
             </SortableContext>
