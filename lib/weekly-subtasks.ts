@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { DASHBOARD_CATEGORIES, isDashboardCategory } from "@/lib/dashboard-categories"
+import { DASHBOARD_CATEGORIES, isDashboardCategory, type DashboardCategory } from "@/lib/dashboard-categories"
 import type { WeeklySubtaskStats } from "@/lib/weekly-subtasks-shared"
 
 function pad(n: number): string {
