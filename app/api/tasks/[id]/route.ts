@@ -13,7 +13,10 @@ export async function PATCH(
 
     const data: Prisma.TaskUpdateInput = {}
     if (body.title !== undefined) data.title = String(body.title).trim()
-    if (body.status !== undefined) data.status = body.status
+    if (body.status !== undefined) {
+      data.status = body.status
+      data.completedAt = body.status === 'done' ? new Date() : null
+    }
     if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null
     if (body.assigneeId !== undefined) {
       data.assignee = body.assigneeId

@@ -41,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { SUBTASKS_UPDATED_EVENT } from "@/lib/weekly-subtasks-shared"
 import { cn } from "@/lib/utils"
 import { QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
 import { BatchEditDialog, DeleteProjectDialog } from "./project-dialogs"
@@ -288,6 +289,7 @@ export function ProjectList({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       })
+      window.dispatchEvent(new Event(SUBTASKS_UPDATED_EVENT))
     } catch {
       // revert on error
       setTasksByProject((prev) => ({

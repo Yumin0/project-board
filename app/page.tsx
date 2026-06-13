@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import RecentProjectsWidget from "@/components/widgets/RecentProjectsWidget"
 import MonthlyRevenueWidget from "@/components/widgets/MonthlyRevenueWidget"
 import CalendarWidget from "@/components/widgets/CalendarWidget"
+import WeeklySubtasksWidget from "@/components/widgets/WeeklySubtasksWidget"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +15,7 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   recent_projects: RecentProjectsWidget,
   monthly_revenue: MonthlyRevenueWidget,
   monthly_calendar: CalendarWidget,
+  weekly_subtasks: WeeklySubtasksWidget,
 }
 
 export default async function HomePage() {
@@ -36,7 +38,10 @@ export default async function HomePage() {
 
   const enabled = widgets.filter((w) => w.enabled)
   const calendarWidget = enabled.find((w) => w.widgetType === "monthly_calendar")
-  const mainWidgets = enabled.filter((w) => w.widgetType !== "monthly_calendar")
+  const weeklySubtasksWidget = enabled.find((w) => w.widgetType === "weekly_subtasks")
+  const mainWidgets = enabled.filter(
+    (w) => w.widgetType !== "monthly_calendar" && w.widgetType !== "weekly_subtasks"
+  )
 
   function widgetTitle(w: (typeof enabled)[number]) {
     return w.title || WIDGET_REGISTRY.find((r) => r.widgetType === w.widgetType)?.defaultTitle || ""
@@ -58,6 +63,11 @@ export default async function HomePage() {
             >
               管理專案 →
             </Link>
+          )}
+          {w.widgetType === "weekly_subtasks" && (
+            <span className="text-sm" style={{ color: "rgba(70,78,120,.5)" }}>
+              本週 · 各類別
+            </span>
           )}
         </div>
         <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>
@@ -92,9 +102,13 @@ export default async function HomePage() {
           <div className="flex flex-col gap-6">
             {mainWidgets.slice(0, 2).map(renderWidget)}
             {calendarWidget && <div className="lg:hidden">{renderWidget(calendarWidget)}</div>}
+            {weeklySubtasksWidget && <div className="lg:hidden">{renderWidget(weeklySubtasksWidget)}</div>}
             {mainWidgets.slice(2).map(renderWidget)}
           </div>
-          {calendarWidget && <div className="hidden lg:block">{renderWidget(calendarWidget)}</div>}
+          <div className="hidden flex-col gap-5 lg:flex">
+            {calendarWidget && renderWidget(calendarWidget)}
+            {weeklySubtasksWidget && renderWidget(weeklySubtasksWidget)}
+          </div>
         </div>
       </div>
     </div>

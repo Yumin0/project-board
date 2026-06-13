@@ -5,6 +5,7 @@ export const WIDGET_REGISTRY = [
   { widgetType: "recent_projects", label: "近期進行中的專案", defaultTitle: "近期專案" },
   { widgetType: "monthly_revenue", label: "收入月累計曲線圖", defaultTitle: "收入" },
   { widgetType: "monthly_calendar", label: "本月行事曆", defaultTitle: "本月行事曆" },
+  { widgetType: "weekly_subtasks", label: "本週完成子任務統計", defaultTitle: "完成子任務" },
 ] as const
 
 export type WidgetType = (typeof WIDGET_REGISTRY)[number]["widgetType"]

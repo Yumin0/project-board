@@ -14,6 +14,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities"
 
 import { Input } from "@/components/ui/input"
+import { SUBTASKS_UPDATED_EVENT } from "@/lib/weekly-subtasks-shared"
 import { cn } from "@/lib/utils"
 
 const INK = "#2c3150"
@@ -166,6 +167,7 @@ export function ProjectSubtasksPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       })
+      window.dispatchEvent(new Event(SUBTASKS_UPDATED_EVENT))
     } catch {
       setTasks((prev) =>
         prev.map((t) => (t.id === task.id ? { ...t, status: task.status } : t))
