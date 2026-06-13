@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ListChecksIcon,
+  PencilIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
@@ -41,7 +42,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { BatchEditDialog, DeleteProjectDialog, EditProjectDialog } from "./project-dialogs"
+import { QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
+import { BatchEditDialog, DeleteProjectDialog } from "./project-dialogs"
 
 type CategoryField = {
   id: string
@@ -139,6 +141,7 @@ export function ProjectList({
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchEditOpen, setBatchEditOpen] = useState(false)
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({})
   const [addingTaskForProject, setAddingTaskForProject] = useState<string | null>(null)
@@ -534,11 +537,14 @@ export function ProjectList({
                         />
                       ) : (
                         <>
-                          <EditProjectDialog
-                            project={project}
-                            members={members}
-                            categories={categories}
-                          />
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setEditingProjectId(project.id)}
+                          >
+                            <PencilIcon />
+                            <span className="sr-only">編輯「{project.title}」</span>
+                          </Button>
                           <DeleteProjectDialog project={project} />
                         </>
                       )}
@@ -674,11 +680,14 @@ export function ProjectList({
                               />
                             ) : (
                               <>
-                                <EditProjectDialog
-                                  project={project}
-                                  members={members}
-                                  categories={categories}
-                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => setEditingProjectId(project.id)}
+                                >
+                                  <PencilIcon />
+                                  <span className="sr-only">編輯「{project.title}」</span>
+                                </Button>
                                 <DeleteProjectDialog project={project} />
                               </>
                             )}
@@ -801,6 +810,11 @@ export function ProjectList({
         members={members}
         categories={categories}
         onSuccess={handleBatchEditSuccess}
+      />
+
+      <QuickEditProjectDialog
+        projectId={editingProjectId}
+        onOpenChange={(open) => !open && setEditingProjectId(null)}
       />
     </div>
   )

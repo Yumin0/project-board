@@ -1,7 +1,7 @@
 "use client"
 
 import { useActionState, useEffect, useId, useMemo, useState } from "react"
-import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { PlusIcon, Trash2Icon } from "lucide-react"
 
 import {
   AlertDialog,
@@ -39,7 +39,6 @@ import {
   batchUpdateProjects,
   createProject,
   deleteProject,
-  updateProject,
   type BatchEditState,
 } from "./actions"
 import { ProjectForm } from "./project-form"
@@ -102,40 +101,6 @@ export function NewProjectDialog({
           members={members}
           categories={categories}
           action={createProject}
-          onSuccess={() => setOpen(false)}
-        />
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-export function EditProjectDialog({
-  project,
-  members,
-  categories,
-}: {
-  project: Project
-  members: Member[]
-  categories: Category[]
-}) {
-  const [open, setOpen] = useState(false)
-  const boundUpdate = updateProject.bind(null, project.id)
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
-        <PencilIcon />
-        <span className="sr-only">編輯「{project.title}」</span>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>編輯專案</DialogTitle>
-        </DialogHeader>
-        <ProjectForm
-          project={{ ...project, assigneeIds: project.assignees.map((a) => a.id) }}
-          members={members}
-          categories={categories}
-          action={boundUpdate}
           onSuccess={() => setOpen(false)}
         />
       </DialogContent>
