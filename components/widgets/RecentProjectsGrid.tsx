@@ -1,17 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, CalendarDays, Check, GripVertical, Loader2, Pin, Plus } from "lucide-react"
-import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core"
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import { ArrowRight, CalendarDays, Check, Loader2, Pin, Plus } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -28,160 +18,15 @@ import {
   DASHBOARD_CATEGORY_LABELS,
   DASHBOARD_CATEGORY_STYLES,
   type DashboardCategory,
-  type DashboardCategoryStyle,
 } from "@/lib/dashboard-categories"
 import type { PinnedDashboardProject } from "@/lib/dashboard-pins"
+import { QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
 
 type GridEntry = { cat: DashboardCategory; project: PinnedDashboardProject | null }
 type Candidate = { id: string; title: string }
-type DashboardTask = { id: string; title: string; status: string; dueDate: string | null; order: number }
 
 const FONT_FAMILY = '"Noto Sans TC", var(--font-sans), system-ui, sans-serif'
 const CARD_BASE = "flex h-full w-full flex-col gap-2.5 rounded-[22px] p-3.5 text-left"
-
-function formatDue(dateStr: string | null): string | null {
-  if (!dateStr) return null
-  const date = new Date(dateStr)
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  const dd = String(date.getDate()).padStart(2, "0")
-  return `${mm} / ${dd}`
-}
-
-/** Mirrors the server-side progress/next-task derivation in lib/dashboard-pins.ts. */
-function computeProjectStats(tasks: DashboardTask[]) {
-  const total = tasks.length
-  const done = tasks.filter((t) => t.status === "done").length
-  const progress = total === 0 ? 0 : Math.round((done / total) * 100)
-
-  const next = tasks
-    .filter((t) => t.status !== "done")
-    .sort((a, b) => {
-      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-      if (a.dueDate) return -1
-      if (b.dueDate) return 1
-      return 0
-    })[0]
-
-  return {
-    progress,
-    nextTask: next?.title ?? null,
-    due: formatDue(next?.dueDate ?? null),
-  }
-}
-
-/** Sorts incomplete tasks first (in manual order) with completed tasks last. */
-function sortTasksForDisplay(tasks: DashboardTask[]) {
-  return [...tasks].sort((a, b) => {
-    if (a.status === "done" && b.status !== "done") return 1
-    if (a.status !== "done" && b.status === "done") return -1
-    return a.order - b.order
-  })
-}
-
-/** Moves the dragged task to the position of the target task within the list. */
-function reorderTasks(tasks: DashboardTask[], draggedId: string, targetId: string) {
-  if (draggedId === targetId) return tasks
-  const draggedIndex = tasks.findIndex((t) => t.id === draggedId)
-  const targetIndex = tasks.findIndex((t) => t.id === targetId)
-  if (draggedIndex === -1 || targetIndex === -1) return tasks
-  const next = [...tasks]
-  const [dragged] = next.splice(draggedIndex, 1)
-  next.splice(targetIndex, 0, dragged)
-  return next.map((t, i) => ({ ...t, order: i }))
-}
-
-function SortableTaskRow({
-  task,
-  style,
-  isEditing,
-  editingTitle,
-  editingInputRef,
-  isToggling,
-  onToggle,
-  onStartEdit,
-  onEditingTitleChange,
-  onSaveEdit,
-  onCancelEdit,
-}: {
-  task: DashboardTask
-  style: DashboardCategoryStyle | null
-  isEditing: boolean
-  editingTitle: string
-  editingInputRef: React.RefObject<HTMLInputElement | null>
-  isToggling: boolean
-  onToggle: () => void
-  onStartEdit: () => void
-  onEditingTitleChange: (value: string) => void
-  onSaveEdit: () => void
-  onCancelEdit: () => void
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
-  const isDone = task.status === "done"
-  const due = formatDue(task.dueDate)
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        "flex items-center gap-2 rounded-md bg-background py-1.5 transition-colors",
-        isDragging && "z-10 opacity-90 shadow-md"
-      )}
-    >
-      <span
-        {...attributes}
-        {...listeners}
-        className="flex shrink-0 touch-none cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground/70 active:cursor-grabbing"
-        aria-label="拖曳調整順序"
-      >
-        <GripVertical className="size-3.5" />
-      </span>
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={isToggling}
-        className={cn(
-          "flex size-[18px] shrink-0 items-center justify-center rounded-full border transition-colors",
-          !isDone && "border-[rgba(120,128,170,.35)] hover:border-[rgba(120,128,170,.6)]"
-        )}
-        style={isDone && style ? { background: `linear-gradient(135deg, ${style.a}, ${style.b})`, borderColor: style.a } : undefined}
-        aria-label={isDone ? "標記為未完成" : "標記為完成"}
-      >
-        {isToggling ? (
-          <Loader2 className="size-2.5 animate-spin text-white" />
-        ) : (
-          isDone && <Check className="size-2.5 stroke-[3] text-white" />
-        )}
-      </button>
-      {isEditing ? (
-        <Input
-          ref={editingInputRef}
-          value={editingTitle}
-          onChange={(e) => onEditingTitleChange(e.target.value)}
-          onBlur={onSaveEdit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              onSaveEdit()
-            } else if (e.key === "Escape") {
-              onCancelEdit()
-            }
-          }}
-          className="h-7 flex-1 border-none bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-        />
-      ) : (
-        <span
-          onClick={onStartEdit}
-          className={cn("flex-1 cursor-text text-sm", isDone && "text-muted-foreground line-through")}
-          style={{ color: isDone ? undefined : "#2c3150" }}
-        >
-          {task.title}
-        </span>
-      )}
-      {due && <span className="text-xs text-muted-foreground tabular-nums">{due}</span>}
-    </div>
-  )
-}
 
 function CategoryChip({ cat }: { cat: DashboardCategory }) {
   const style = DASHBOARD_CATEGORY_STYLES[cat]
@@ -360,25 +205,13 @@ export default function RecentProjectsGrid({
   const [highlightCat, setHighlightCat] = useState<DashboardCategory | null>(null)
   const cardRefs = useRef<Partial<Record<DashboardCategory, HTMLButtonElement | null>>>({})
 
-  const [taskDialogCat, setTaskDialogCat] = useState<DashboardCategory | null>(null)
-  const [tasks, setTasks] = useState<DashboardTask[]>([])
-  const [loadingTasks, setLoadingTasks] = useState(false)
-  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
-  const [addingTask, setAddingTask] = useState(false)
-  const [newTaskTitle, setNewTaskTitle] = useState("")
-  const newTaskInputRef = useRef<HTMLInputElement | null>(null)
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState("")
-  const editingInputRef = useRef<HTMLInputElement | null>(null)
-  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const [editCat, setEditCat] = useState<DashboardCategory | null>(null)
 
   const activeEntry = grid.find((g) => g.cat === activeCat)
   const activeLabel = activeCat ? DASHBOARD_CATEGORY_LABELS[activeCat] : ""
   const candidates = (activeCat ? candidatesByCat[activeCat] : undefined) ?? []
 
-  const taskDialogEntry = grid.find((g) => g.cat === taskDialogCat)
-  const taskDialogProject = taskDialogEntry?.project ?? null
-  const sortedTasks = sortTasksForDisplay(tasks)
+  const editProjectId = grid.find((g) => g.cat === editCat)?.project?.id ?? null
 
   function closePicker() {
     setActiveCat(null)
@@ -414,140 +247,15 @@ export default function RecentProjectsGrid({
     setTimeout(() => setHighlightCat((c) => (c === next.cat ? null : c)), 1600)
   }
 
-  function applyProjectStats(cat: DashboardCategory, stats: ReturnType<typeof computeProjectStats>) {
-    setGrid((prev) =>
-      prev.map((g) => (g.cat === cat && g.project ? { ...g, project: { ...g.project, ...stats } } : g))
-    )
+  async function refreshGrid() {
+    const res = await fetch("/api/dashboard/pins")
+    setGrid(await res.json())
   }
 
-  function closeTaskDialog() {
-    setTaskDialogCat(null)
-    setTasks([])
-    setAddingTask(false)
-    setNewTaskTitle("")
-  }
-
-  async function openTaskDialog(cat: DashboardCategory) {
-    const entry = grid.find((g) => g.cat === cat)
-    if (!entry?.project) return
-    setTaskDialogCat(cat)
-    setTasks([])
-    setAddingTask(false)
-    setNewTaskTitle("")
-    setLoadingTasks(true)
-    try {
-      const res = await fetch(`/api/projects/${entry.project.id}/tasks`)
-      const data: DashboardTask[] = await res.json()
-      setTasks(data)
-    } finally {
-      setLoadingTasks(false)
-    }
-  }
-
-  async function toggleTask(task: DashboardTask) {
-    if (!taskDialogCat) return
-    const previousTasks = tasks
-    const newStatus = task.status === "done" ? "todo" : "done"
-    const newTasks = tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))
-
-    setTasks(newTasks)
-    applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
-    setTogglingTaskId(task.id)
-    try {
-      await fetch(`/api/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      })
-    } catch {
-      setTasks(previousTasks)
-      applyProjectStats(taskDialogCat, computeProjectStats(previousTasks))
-    } finally {
-      setTogglingTaskId(null)
-    }
-  }
-
-  function startAddingTask() {
-    setAddingTask(true)
-    setNewTaskTitle("")
-    setTimeout(() => newTaskInputRef.current?.focus(), 50)
-  }
-
-  async function submitNewTask() {
-    if (!taskDialogCat || !taskDialogProject) return
-    const title = newTaskTitle.trim()
-    if (!title) {
-      setAddingTask(false)
-      setNewTaskTitle("")
-      return
-    }
-    setAddingTask(false)
-    setNewTaskTitle("")
-    try {
-      const res = await fetch(`/api/projects/${taskDialogProject.id}/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      })
-      if (res.ok) {
-        const task: DashboardTask = await res.json()
-        const newTasks = [...tasks, task]
-        setTasks(newTasks)
-        applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
-      }
-    } catch {
-      // silently fail
-    }
-  }
-
-  function startEditingTask(task: DashboardTask) {
-    setEditingTaskId(task.id)
-    setEditingTitle(task.title)
-    setTimeout(() => editingInputRef.current?.focus(), 50)
-  }
-
-  function cancelEditingTask() {
-    setEditingTaskId(null)
-    setEditingTitle("")
-  }
-
-  async function saveTaskEdit() {
-    if (!taskDialogCat || !editingTaskId) return
-    const taskId = editingTaskId
-    const title = editingTitle.trim()
-    const original = tasks.find((t) => t.id === taskId)
-    setEditingTaskId(null)
-    if (!original || !title || title === original.title) return
-
-    const newTasks = tasks.map((t) => (t.id === taskId ? { ...t, title } : t))
-    setTasks(newTasks)
-    applyProjectStats(taskDialogCat, computeProjectStats(newTasks))
-    try {
-      await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      })
-    } catch {
-      // silently fail
-    }
-  }
-
-  async function handleTaskDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id || !taskDialogProject) return
-
-    const reordered = reorderTasks(sortedTasks, String(active.id), String(over.id))
-    setTasks(reordered)
-    try {
-      await fetch(`/api/projects/${taskDialogProject.id}/tasks`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskIds: reordered.map((t) => t.id) }),
-      })
-    } catch {
-      // silently fail
-    }
+  function handleEditDialogOpenChange(open: boolean) {
+    if (open) return
+    setEditCat(null)
+    refreshGrid()
   }
 
   async function handlePin(projectId: string) {
@@ -626,7 +334,7 @@ export default function RecentProjectsGrid({
               key={cat}
               cat={cat}
               project={project}
-              onOpenTasks={() => openTaskDialog(cat)}
+              onOpenTasks={() => setEditCat(cat)}
               onManage={() => openPicker(cat)}
             />
           ) : (
@@ -716,110 +424,7 @@ export default function RecentProjectsGrid({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={taskDialogCat !== null} onOpenChange={(open) => !open && closeTaskDialog()}>
-        <DialogContent style={{ fontFamily: FONT_FAMILY }}>
-          <DialogHeader>
-            <DialogTitle>{taskDialogProject?.name ?? ""}</DialogTitle>
-            <DialogDescription>勾選任務即可標記完成，進度與下一步會即時更新。</DialogDescription>
-          </DialogHeader>
-
-          {taskDialogCat && taskDialogProject && (
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <CategoryChip cat={taskDialogCat} />
-                <span
-                  className="text-[12px] font-semibold"
-                  style={{ color: DASHBOARD_CATEGORY_STYLES[taskDialogCat].ink }}
-                >
-                  {taskDialogProject.progress}% 完成
-                </span>
-              </div>
-              <div className="h-[7px] w-full rounded-full" style={{ background: "rgba(120,128,170,.14)" }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${taskDialogProject.progress}%`,
-                    background: `linear-gradient(90deg, ${DASHBOARD_CATEGORY_STYLES[taskDialogCat].a}, ${DASHBOARD_CATEGORY_STYLES[taskDialogCat].b})`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="flex max-h-[40vh] flex-col gap-0.5 overflow-y-auto py-1">
-            {loadingTasks && (
-              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                載入中…
-              </div>
-            )}
-            {!loadingTasks && sortedTasks.length === 0 && !addingTask && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                還沒有任務，新增第一個作為下一步吧
-              </p>
-            )}
-            {!loadingTasks && sortedTasks.length > 0 && (
-              <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
-                <SortableContext items={sortedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                  {sortedTasks.map((task) => (
-                    <SortableTaskRow
-                      key={task.id}
-                      task={task}
-                      style={taskDialogCat ? DASHBOARD_CATEGORY_STYLES[taskDialogCat] : null}
-                      isEditing={editingTaskId === task.id}
-                      editingTitle={editingTitle}
-                      editingInputRef={editingInputRef}
-                      isToggling={togglingTaskId === task.id}
-                      onToggle={() => toggleTask(task)}
-                      onStartEdit={() => startEditingTask(task)}
-                      onEditingTitleChange={setEditingTitle}
-                      onSaveEdit={saveTaskEdit}
-                      onCancelEdit={cancelEditingTask}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </div>
-
-          <div className="border-t pt-2.5">
-            {addingTask ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  submitNewTask()
-                }}
-                className="flex items-center gap-2"
-              >
-                <div className="size-[18px] shrink-0 rounded-full border border-[rgba(120,128,170,.35)]" />
-                <Input
-                  ref={newTaskInputRef}
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onBlur={submitNewTask}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setAddingTask(false)
-                      setNewTaskTitle("")
-                    }
-                  }}
-                  placeholder="輸入任務名稱，按 Enter 確認"
-                  className="h-8 flex-1 border-none bg-transparent px-0 shadow-none focus-visible:ring-0"
-                />
-              </form>
-            ) : (
-              <button
-                type="button"
-                onClick={startAddingTask}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground"
-              >
-                <Plus className="size-3.5" />
-                新增任務
-              </button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <QuickEditProjectDialog projectId={editProjectId} onOpenChange={handleEditDialogOpenChange} />
     </div>
   )
 }
