@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { logout } from "@/app/login/actions"
 import { QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
+import { getRecentProjects } from "@/lib/recent-projects"
 
 const ACC = { a: "#8aa6e8", b: "#ab92d8" } // 主強調色（藍紫漸層）
 const LIFE = { a: "#f0a896", b: "#f6cabb" } // 頭像用（珊瑚橘漸層）
@@ -61,11 +62,13 @@ export function AppHeader() {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const [editProjectId, setEditProjectId] = useState<string | null>(null)
+  const [recentProjects, setRecentProjects] = useState<ProjectSearchResult[]>([])
   const results = useProjectSearch(query)
+  const list = query.trim() ? results : recentProjects
 
   useEffect(() => {
     setActiveIndex(-1)
-  }, [results])
+  }, [list])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -86,17 +89,17 @@ export function AppHeader() {
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open || results.length === 0) return
+    if (!open || list.length === 0) return
 
     if (event.key === "ArrowDown") {
       event.preventDefault()
-      setActiveIndex((prev) => (prev + 1) % results.length)
+      setActiveIndex((prev) => (prev + 1) % list.length)
     } else if (event.key === "ArrowUp") {
       event.preventDefault()
-      setActiveIndex((prev) => (prev - 1 + results.length) % results.length)
+      setActiveIndex((prev) => (prev - 1 + list.length) % list.length)
     } else if (event.key === "Enter" && activeIndex >= 0) {
       event.preventDefault()
-      selectProject(results[activeIndex])
+      selectProject(list[activeIndex])
     } else if (event.key === "Escape") {
       setOpen(false)
     }
@@ -151,10 +154,15 @@ export function AppHeader() {
                 type="search"
                 value={query}
                 onChange={(event) => {
-                  setQuery(event.target.value)
+                  const value = event.target.value
+                  setQuery(value)
+                  if (!value.trim()) setRecentProjects(getRecentProjects())
                   setOpen(true)
                 }}
-                onFocus={() => query.trim() && setOpen(true)}
+                onFocus={() => {
+                  if (!query.trim()) setRecentProjects(getRecentProjects())
+                  setOpen(true)
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder="搜尋專案"
                 className="w-full bg-transparent outline-none placeholder:text-[rgba(70,78,120,.6)]"
@@ -162,7 +170,7 @@ export function AppHeader() {
               />
             </div>
 
-            {open && query.trim() && (
+            {open && (query.trim() ? true : recentProjects.length > 0) && (
               <div
                 className="absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-2xl"
                 style={{
@@ -173,7 +181,15 @@ export function AppHeader() {
                   boxShadow: "0 12px 32px rgba(44,49,80,.18)",
                 }}
               >
-                {results.length === 0 ? (
+                {!query.trim() && (
+                  <p
+                    className="px-4 pt-2.5 pb-1"
+                    style={{ fontSize: 11, color: "rgba(70,78,120,.5)" }}
+                  >
+                    最近瀏覽
+                  </p>
+                )}
+                {list.length === 0 ? (
                   <p
                     className="px-4 py-3"
                     style={{ fontSize: 13, color: "rgba(70,78,120,.6)" }}
@@ -181,7 +197,7 @@ export function AppHeader() {
                     找不到符合的專案
                   </p>
                 ) : (
-                  results.map((project, index) => (
+                  list.map((project, index) => (
                     <button
                       key={project.id}
                       type="button"

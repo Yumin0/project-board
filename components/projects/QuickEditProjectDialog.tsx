@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs"
 import { updateProject } from "@/app/projects/actions"
 import { ProjectForm } from "@/app/projects/project-form"
 import { ProjectSubtasksPanel } from "@/components/projects/ProjectSubtasksPanel"
+import { addRecentProject } from "@/lib/recent-projects"
 import { cn } from "@/lib/utils"
 
 const FONT_FAMILY = '"Noto Sans TC", var(--font-sans), system-ui, sans-serif'
@@ -81,7 +82,15 @@ export function QuickEditProjectDialog({
     fetch(`/api/projects/${projectId}/edit-data`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json: EditData | null) => {
-        if (!cancelled) setData(json)
+        if (cancelled) return
+        setData(json)
+        if (json) {
+          addRecentProject({
+            id: json.project.id,
+            title: json.project.title,
+            status: json.project.status,
+          })
+        }
       })
       .catch(() => {
         if (!cancelled) setData(null)
