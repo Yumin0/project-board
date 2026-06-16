@@ -16,8 +16,12 @@ model Member {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  assignedProjects  Project[]
-  assignedTasks     Task[]    @relation("TaskAssignee")
+  accountId String?
+  account   Account?   @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  assignedProjects     Project[]
+  assignedTasks        Task[]             @relation("TaskAssignee")
+  commissionProduction CommissionRecord[] @relation("CommissionProductionMember")
 
   @@map("members")
 }
@@ -41,9 +45,10 @@ model Project {
   dashboardCategory String   @default("side")
   dashboardPin      DashboardPin?
 
-  tasks         Task[]
-  incomeRecords IncomeRecord[]
-  transfers     Transfer[]
+  tasks            Task[]
+  incomeRecords    IncomeRecord[]
+  transfers        Transfer[]
+  commissionRecord CommissionRecord?
 
   @@map("projects")
 }
@@ -58,6 +63,7 @@ model Account {
   records      IncomeRecord[]
   transfersOut Transfer[]     @relation("TransferFromAccount")
   transfersIn  Transfer[]     @relation("TransferToAccount")
+  members      Member[]
 
   @@map("accounts")
 }
@@ -173,6 +179,34 @@ model WorkLog {
 
   @@unique([date, category])
   @@map("work_logs")
+}
+
+// Tracks commission splits for 副業 projects. One record per project (a
+// project can only be billed once). Stores amounts at calculation time so
+// they remain accurate even if the project's custom field values change later.
+model CommissionRecord {
+  id               String    @id @default(dbgenerated("nextval('commission_records_id_seq')::text"))
+  month            String    // "2026-06"
+  totalAmount      Int
+  commissionRate   Float     // e.g. 20.0 (%)
+  commissionAmount Int
+  consultingFee    Int       @default(0)
+  productionFee    Int
+
+  salesPaidAt      DateTime?
+  consultingPaidAt DateTime?
+  productionPaidAt DateTime?
+
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  productionMemberId String?
+  productionMember   Member? @relation("CommissionProductionMember", fields: [productionMemberId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("commission_records")
 }
 
 model Task {

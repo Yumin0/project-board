@@ -78,6 +78,13 @@ export default async function ProjectsPage({
           >
             收入帳戶
           </Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/commission" />}
+          >
+            分潤結算
+          </Button>
           <NewProjectDialog members={members} categories={categories} />
         </div>
       </div>

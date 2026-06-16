@@ -8,11 +8,15 @@ import { NewMemberDialog } from "./member-dialogs"
 export const dynamic = "force-dynamic"
 
 export default async function MembersPage() {
-  const members = await prisma.member.findMany({
-    include: { _count: { select: { assignedProjects: true } } },
-  })
-  // ids are sequential integers stored as text, so a plain string sort would
-  // order "10" before "2" — sort numerically instead
+  const [members, accounts] = await Promise.all([
+    prisma.member.findMany({
+      include: {
+        _count: { select: { assignedProjects: true } },
+        account: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.account.findMany({ orderBy: { id: "asc" }, select: { id: true, name: true } }),
+  ])
   members.sort((a, b) => Number(a.id) - Number(b.id))
 
   return (
@@ -31,10 +35,10 @@ export default async function MembersPage() {
             管理可以被指派為專案負責人的成員
           </p>
         </div>
-        <NewMemberDialog />
+        <NewMemberDialog accounts={accounts} />
       </div>
 
-      <MemberList members={members} />
+      <MemberList members={members} accounts={accounts} />
     </div>
   )
 }

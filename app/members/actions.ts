@@ -12,17 +12,20 @@ function isUniqueNameViolation(error: unknown) {
 
 const memberSchema = z.object({
   name: z.string().trim().min(1, "名稱為必填").max(100),
+  accountId: z.string().trim().optional(),
 })
 
 export type MemberFormState = {
   status: "idle" | "success" | "error"
   error?: string
-  fieldErrors?: Partial<Record<"name", string[]>>
+  fieldErrors?: Partial<Record<"name" | "accountId", string[]>>
 }
 
 function parseMemberForm(formData: FormData) {
+  const accountId = formData.get("accountId")
   return memberSchema.safeParse({
     name: formData.get("name"),
+    accountId: accountId && accountId !== "__none__" ? String(accountId) : undefined,
   })
 }
 
@@ -37,7 +40,7 @@ export async function createMember(
 
   try {
     await prisma.member.create({
-      data: { name: parsed.data.name },
+      data: { name: parsed.data.name, accountId: parsed.data.accountId ?? null },
     })
   } catch (error) {
     if (isUniqueNameViolation(error)) {
@@ -64,7 +67,7 @@ export async function updateMember(
   try {
     await prisma.member.update({
       where: { id },
-      data: { name: parsed.data.name },
+      data: { name: parsed.data.name, accountId: parsed.data.accountId ?? null },
     })
   } catch (error) {
     if (isUniqueNameViolation(error)) {

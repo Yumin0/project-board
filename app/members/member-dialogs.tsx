@@ -28,9 +28,12 @@ import { MemberForm } from "./member-form"
 type Member = {
   id: string
   name: string
+  accountId?: string | null
 }
 
-export function NewMemberDialog() {
+type Account = { id: string; name: string }
+
+export function NewMemberDialog({ accounts }: { accounts: Account[] }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -43,13 +46,13 @@ export function NewMemberDialog() {
         <DialogHeader>
           <DialogTitle>新增成員</DialogTitle>
         </DialogHeader>
-        <MemberForm action={createMember} onSuccess={() => setOpen(false)} />
+        <MemberForm accounts={accounts} action={createMember} onSuccess={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   )
 }
 
-export function EditMemberDialog({ member }: { member: Member }) {
+export function EditMemberDialog({ member, accounts }: { member: Member; accounts: Account[] }) {
   const [open, setOpen] = useState(false)
   const boundUpdate = updateMember.bind(null, member.id)
 
@@ -63,7 +66,7 @@ export function EditMemberDialog({ member }: { member: Member }) {
         <DialogHeader>
           <DialogTitle>編輯成員</DialogTitle>
         </DialogHeader>
-        <MemberForm member={member} action={boundUpdate} onSuccess={() => setOpen(false)} />
+        <MemberForm member={member} accounts={accounts} action={boundUpdate} onSuccess={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   )
