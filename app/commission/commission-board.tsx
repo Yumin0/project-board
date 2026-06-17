@@ -7,7 +7,6 @@ import {
   ChevronRightIcon,
   PlusIcon,
   Trash2Icon,
-  PrinterIcon,
   PencilIcon,
   CheckIcon,
   UndoIcon,
@@ -659,111 +658,182 @@ function RecordCard({
 }
 
 // ---------------------------------------------------------------------------
-// Print view – 業務
+// Sales view
 // ---------------------------------------------------------------------------
 
 function SalesPrintView({ records, month }: { records: CommissionRecord[]; month: string }) {
   const total = records.reduce((s, r) => s + r.commissionAmount, 0)
   return (
-    <div className="rounded-xl border bg-white p-6">
-      <h2 className="mb-4 text-lg font-bold">{monthLabel(month)} 給業務</h2>
-      <table className="w-full border-collapse text-sm">
+    <div className="rounded-2xl bg-white p-6 shadow-sm dark:bg-card">
+      <h2 className="mb-5 text-lg font-bold">{monthLabel(month)} 給業務</h2>
+
+      {/* Desktop table */}
+      <table className="hidden w-full text-sm sm:table">
         <thead>
-          <tr className="border text-left">
-            <th className="border px-3 py-2">廠商</th>
-            <th className="border px-3 py-2">總金額</th>
-            <th className="border px-3 py-2">分潤%</th>
-            <th className="border px-3 py-2">佣金</th>
-            <th className="border px-3 py-2">製作費</th>
+          <tr className="border-b text-left">
+            <th className="pb-3 font-medium text-muted-foreground">廠商</th>
+            <th className="pb-3 font-medium text-muted-foreground">總金額</th>
+            <th className="pb-3 font-medium text-muted-foreground">製作費</th>
+            <th className="pb-3 font-medium text-muted-foreground">佣金</th>
+            <th className="pb-3 font-medium text-muted-foreground">分潤%</th>
           </tr>
         </thead>
         <tbody>
           {records.map((r) => (
-            <tr key={r.id} className="border">
-              <td className="border px-3 py-2">{r.project.title}</td>
-              <td className="border px-3 py-2">{fmt(r.totalAmount)}</td>
-              <td className="border px-3 py-2">{r.commissionRate}%</td>
-              <td className="border px-3 py-2">{fmt(r.commissionAmount)}</td>
-              {/* Business sees totalAmount - commission (no consulting fee detail) */}
-              <td className="border px-3 py-2">{fmt(r.totalAmount - r.commissionAmount)}</td>
+            <tr key={r.id} className="border-b last:border-b-0">
+              <td className="py-3 font-medium">{r.project.title}</td>
+              <td className="py-3">{fmt(r.totalAmount)}</td>
+              <td className="py-3">{fmt(r.totalAmount - r.commissionAmount)}</td>
+              <td className="py-3 font-semibold text-yellow-600">{fmt(r.commissionAmount)}</td>
+              <td className="py-3">{r.commissionRate}%</td>
             </tr>
           ))}
-          <tr>
-            <td colSpan={3} />
-            <td className="border px-3 py-2 font-bold text-yellow-700 bg-yellow-50">
-              {fmt(total)}
-            </td>
-            <td />
-          </tr>
         </tbody>
       </table>
+      <div className="mt-4 hidden items-center justify-end gap-3 sm:flex">
+        <span className="text-sm text-muted-foreground">佣金合計</span>
+        <span className="rounded-full bg-yellow-50 px-4 py-1.5 font-bold text-yellow-700">
+          {fmt(total)}
+        </span>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        {records.map((r) => (
+          <div key={r.id} className="rounded-xl border p-4">
+            <p className="mb-3 font-semibold">{r.project.title}</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">總金額</p>
+                <p className="font-semibold">{fmt(r.totalAmount)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">製作費</p>
+                <p className="font-semibold">{fmt(r.totalAmount - r.commissionAmount)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">分潤%</p>
+                <p className="font-semibold">{r.commissionRate}%</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">佣金</p>
+                <p className="font-bold text-yellow-600">{fmt(r.commissionAmount)}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-between rounded-xl bg-yellow-50 px-4 py-3">
+          <span className="text-sm font-medium text-yellow-700">佣金合計</span>
+          <span className="text-lg font-bold text-yellow-700">{fmt(total)}</span>
+        </div>
+      </div>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Print view – 外包
+// Producer view (per-member)
 // ---------------------------------------------------------------------------
 
-function ProductionPrintView({ records, month }: { records: CommissionRecord[]; month: string }) {
-  const outsourced = records.filter(
-    (r) => r.productionMember && r.productionMember.name !== "Yumin"
-  )
-  const byMember = outsourced.reduce<Record<string, CommissionRecord[]>>((acc, r) => {
-    const name = r.productionMember!.name
-    if (!acc[name]) acc[name] = []
-    acc[name].push(r)
-    return acc
-  }, {})
+function ProducerView({
+  records,
+  month,
+  memberId,
+  memberName,
+}: {
+  records: CommissionRecord[]
+  month: string
+  memberId: string
+  memberName: string
+}) {
+  const filtered =
+    memberName === "Yumin"
+      ? records.filter((r) => !r.productionMember || r.productionMember.name === "Yumin")
+      : records.filter((r) => r.productionMember?.id === memberId)
 
-  if (Object.keys(byMember).length === 0) {
+  const total = filtered.reduce((s, r) => s + r.productionFee, 0)
+
+  if (filtered.length === 0) {
     return (
-      <div className="rounded-xl border bg-white p-6 text-sm text-muted-foreground">
-        本月沒有外包製作的專案
+      <div className="rounded-xl border bg-white p-6 text-sm text-muted-foreground dark:bg-card">
+        本月沒有{memberName}的製作專案
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {Object.entries(byMember).map(([name, recs]) => {
-        const total = recs.reduce((s, r) => s + r.productionFee, 0)
-        return (
-          <div key={name} className="rounded-xl border bg-white p-6">
-            <h2 className="mb-4 text-lg font-bold">
-              {monthLabel(month)} 給{name}
-            </h2>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border text-left">
-                  <th className="border px-3 py-2">廠商</th>
-                  <th className="border px-3 py-2">總金額</th>
-                  <th className="border px-3 py-2">業務佣金</th>
-                  <th className="border px-3 py-2">諮詢費</th>
-                  <th className="border px-3 py-2">製作費（實拿）</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recs.map((r) => (
-                  <tr key={r.id} className="border">
-                    <td className="border px-3 py-2">{r.project.title}</td>
-                    <td className="border px-3 py-2">{fmt(r.totalAmount)}</td>
-                    <td className="border px-3 py-2">{fmt(r.commissionAmount)}</td>
-                    <td className="border px-3 py-2">{r.consultingFee > 0 ? fmt(r.consultingFee) : "—"}</td>
-                    <td className="border px-3 py-2">{fmt(r.productionFee)}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={4} />
-                  <td className="border px-3 py-2 font-bold text-yellow-700 bg-yellow-50">
-                    {fmt(total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+    <div className="rounded-2xl bg-white p-6 shadow-sm dark:bg-card">
+      <h2 className="mb-5 text-lg font-bold">{monthLabel(month)} 給{memberName}</h2>
+
+      {/* Desktop table */}
+      <table className="hidden w-full text-sm sm:table">
+        <thead>
+          <tr className="border-b text-left">
+            <th className="pb-3 font-medium text-muted-foreground">廠商</th>
+            <th className="pb-3 font-medium text-muted-foreground">總金額</th>
+            <th className="pb-3 font-medium text-muted-foreground">業務佣金</th>
+            <th className="pb-3 font-medium text-muted-foreground">諮詢費</th>
+            <th className="pb-3 font-medium text-muted-foreground">製作費（實拿）</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r) => (
+            <tr key={r.id} className="border-b last:border-b-0">
+              <td className="py-3 font-medium">{r.project.title}</td>
+              <td className="py-3">{fmt(r.totalAmount)}</td>
+              <td className="py-3">{fmt(r.commissionAmount)}</td>
+              <td className="py-3">{r.consultingFee > 0 ? fmt(r.consultingFee) : "—"}</td>
+              <td className="py-3 font-semibold text-yellow-600">{fmt(r.productionFee)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-4 hidden items-center justify-end gap-3 sm:flex">
+        <span className="text-sm text-muted-foreground">製作費實拿合計</span>
+        <span className="rounded-full bg-yellow-50 px-4 py-1.5 font-bold text-yellow-700">
+          {fmt(total)}
+        </span>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        {filtered.map((r) => (
+          <div key={r.id} className="rounded-xl border p-4">
+            <p className="mb-3 font-semibold">{r.project.title}</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">總金額</p>
+                <p className="font-semibold">{fmt(r.totalAmount)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">業務佣金</p>
+                <p className="font-semibold">{fmt(r.commissionAmount)}</p>
+              </div>
+              {r.consultingFee > 0 ? (
+                <>
+                  <div>
+                    <p className="text-muted-foreground">諮詢費</p>
+                    <p className="font-semibold">{fmt(r.consultingFee)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">製作費 (實拿)</p>
+                    <p className="font-bold text-yellow-600">{fmt(r.productionFee)}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">製作費 (實拿)</p>
+                  <p className="font-bold text-yellow-600">{fmt(r.productionFee)}</p>
+                </div>
+              )}
+            </div>
           </div>
-        )
-      })}
+        ))}
+        <div className="flex items-center justify-between rounded-xl bg-yellow-50 px-4 py-3">
+          <span className="text-sm font-medium text-yellow-700">製作費實拿合計</span>
+          <span className="text-lg font-bold text-yellow-700">{fmt(total)}</span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -772,7 +842,7 @@ function ProductionPrintView({ records, month }: { records: CommissionRecord[]; 
 // Main board
 // ---------------------------------------------------------------------------
 
-type ViewMode = "manage" | "sales" | "production"
+type ViewOption = { value: string; label: string }
 
 export function CommissionBoard({
   month,
@@ -789,40 +859,57 @@ export function CommissionBoard({
   accounts: Account[]
   salesMember: MemberBase | null
 }) {
-  const [viewMode, setViewMode] = useState<ViewMode>("manage")
+  const [viewMode, setViewMode] = useState("manage")
 
   const sourceAccount = accounts.find((a) => a.name === "專案總收入")
   const totalCommission = records.reduce((s, r) => s + r.commissionAmount, 0)
+
+  // Build producer options from this month's records
+  const producerMap = new Map<string, { id: string; name: string }>()
+  const yuminMember = members.find((m) => m.name === "Yumin")
+  for (const r of records) {
+    if (!r.productionMember || r.productionMember.name === "Yumin") {
+      if (yuminMember) producerMap.set(yuminMember.id, { id: yuminMember.id, name: "Yumin" })
+    } else {
+      producerMap.set(r.productionMember.id, {
+        id: r.productionMember.id,
+        name: r.productionMember.name,
+      })
+    }
+  }
+
+  const viewOptions: ViewOption[] = [
+    { value: "manage", label: "管理視圖" },
+    { value: "sales", label: "業務視圖" },
+    ...Array.from(producerMap.values()).map((p) => ({
+      value: `producer:${p.id}`,
+      label: `外包·${p.name}`,
+    })),
+  ]
+
+  const activeProducer = viewMode.startsWith("producer:")
+    ? Array.from(producerMap.values()).find((p) => p.id === viewMode.slice("producer:".length)) ?? null
+    : null
 
   return (
     <div className="flex flex-col gap-6">
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthNav month={month} />
-        <div className="flex items-center gap-2">
-          {/* View mode tabs */}
-          <div className="flex rounded-lg border text-sm">
-            {(["manage", "sales", "production"] as ViewMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 transition-colors first:rounded-l-md last:rounded-r-md ${
-                  viewMode === mode
-                    ? "bg-foreground text-background"
-                    : "hover:bg-muted"
-                }`}
-              >
-                {mode === "manage" ? "管理" : mode === "sales" ? "業務視圖" : "外包視圖"}
-              </button>
+        <Select value={viewMode} onValueChange={setViewMode}>
+          <SelectTrigger className="h-9 w-auto rounded-full border-0 bg-foreground px-4 text-sm text-background shadow-none">
+            <SelectValue placeholder="選擇視圖">
+              {(v: string) => viewOptions.find((o) => o.value === v)?.label ?? "選擇視圖"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {viewOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
-          </div>
-          {viewMode !== "manage" && (
-            <Button variant="outline" size="sm" onClick={() => window.print()}>
-              <PrinterIcon data-icon="inline-start" />
-              截圖 / 列印
-            </Button>
-          )}
-        </div>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Summary bar (management only) */}
@@ -872,7 +959,15 @@ export function CommissionBoard({
       )}
 
       {viewMode === "sales" && <SalesPrintView records={records} month={month} />}
-      {viewMode === "production" && <ProductionPrintView records={records} month={month} />}
+
+      {activeProducer && (
+        <ProducerView
+          records={records}
+          month={month}
+          memberId={activeProducer.id}
+          memberName={activeProducer.name}
+        />
+      )}
     </div>
   )
 }
