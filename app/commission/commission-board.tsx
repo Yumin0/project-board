@@ -896,7 +896,7 @@ export function CommissionBoard({
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthNav month={month} />
-        <Select value={viewMode} onValueChange={setViewMode}>
+        <Select value={viewMode} onValueChange={(v) => v !== null && setViewMode(v)}>
           <SelectTrigger className="h-9 w-auto rounded-full border-0 bg-foreground px-4 text-sm text-background shadow-none">
             <SelectValue placeholder="選擇視圖">
               {(v: string) => viewOptions.find((o) => o.value === v)?.label ?? "選擇視圖"}
