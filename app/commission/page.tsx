@@ -80,7 +80,7 @@ export default async function CommissionPage({
         </Link>
         <h1 className="font-heading text-2xl font-semibold">分潤結算</h1>
         <p className="text-sm text-muted-foreground">
-          管理每月副業專案的業務佣金與製作費分配
+          管理每月經貿網專案的業務佣金與製作費分配
         </p>
       </div>
 
