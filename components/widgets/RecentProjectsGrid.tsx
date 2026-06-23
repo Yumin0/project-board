@@ -20,7 +20,7 @@ import {
   type DashboardCategory,
 } from "@/lib/dashboard-categories"
 import type { PinnedDashboardProject } from "@/lib/dashboard-pins"
-import { QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
+import { prefetchProjectEditData, QuickEditProjectDialog } from "@/components/projects/QuickEditProjectDialog"
 
 type GridEntry = { cat: DashboardCategory; project: PinnedDashboardProject | null }
 type Candidate = { id: string; title: string }
@@ -65,6 +65,7 @@ function ProjectCard({
       role="button"
       tabIndex={0}
       onClick={onOpenTasks}
+      onMouseEnter={() => prefetchProjectEditData(project.id)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()

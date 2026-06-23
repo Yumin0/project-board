@@ -62,6 +62,18 @@ type EditData = {
   categories: Category[]
 }
 
+const editDataCache: Record<string, EditData> = {}
+
+export async function prefetchProjectEditData(projectId: string): Promise<void> {
+  if (editDataCache[projectId]) return
+  try {
+    const res = await fetch(`/api/projects/${projectId}/edit-data`)
+    if (res.ok) editDataCache[projectId] = await res.json()
+  } catch {
+    // best-effort，失敗不影響正常流程
+  }
+}
+
 export function QuickEditProjectDialog({
   projectId,
   onOpenChange,
@@ -73,24 +85,33 @@ export function QuickEditProjectDialog({
   const [data, setData] = useState<EditData | null>(null)
 
   useEffect(() => {
-    if (!projectId) {
-      setData(null)
+    if (!projectId) return
+
+    if (editDataCache[projectId]) {
+      setData(editDataCache[projectId])
+      addRecentProject({
+        id: editDataCache[projectId].project.id,
+        title: editDataCache[projectId].project.title,
+        status: editDataCache[projectId].project.status,
+      })
       return
     }
 
+    setData(null)
     let cancelled = false
     fetch(`/api/projects/${projectId}/edit-data`)
       .then((res) => (res.ok ? res.json() : null))
       .then((json: EditData | null) => {
         if (cancelled) return
-        setData(json)
         if (json) {
+          editDataCache[projectId] = json
           addRecentProject({
             id: json.project.id,
             title: json.project.title,
             status: json.project.status,
           })
         }
+        setData(json)
       })
       .catch(() => {
         if (!cancelled) setData(null)
@@ -102,6 +123,7 @@ export function QuickEditProjectDialog({
   }, [projectId])
 
   function handleSuccess() {
+    if (projectId) delete editDataCache[projectId]
     onOpenChange(false)
     router.refresh()
   }
