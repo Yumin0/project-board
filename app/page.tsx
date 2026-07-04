@@ -65,9 +65,12 @@ export default async function HomePage() {
             </Link>
           )}
           {w.widgetType === "weekly_subtasks" && (
-            <span className="text-sm" style={{ color: "rgba(70,78,120,.5)" }}>
-              本週 · 各類別
-            </span>
+            <Link
+              href="/stats"
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              查看趨勢 →
+            </Link>
           )}
         </div>
         <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted" />}>

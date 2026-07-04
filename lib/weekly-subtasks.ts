@@ -12,7 +12,7 @@ function dateKey(date: Date): string {
 
 // Returns the Monday 00:00 (inclusive) and following Monday 00:00 (exclusive)
 // of the ISO week containing `date`, in local time.
-function getWeekRange(date: Date): { start: Date; end: Date } {
+export function getWeekRange(date: Date): { start: Date; end: Date } {
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   const day = start.getDay() // 0 = Sunday .. 6 = Saturday
   const diffToMonday = day === 0 ? -6 : 1 - day
@@ -51,4 +51,41 @@ export async function getWeeklySubtaskStats(week: string = "current"): Promise<W
   weekEnd.setDate(weekEnd.getDate() - 1)
 
   return { weekStart: dateKey(start), weekEnd: dateKey(weekEnd), counts, total }
+}
+
+// Returns weekly subtask stats for the last `weeks` Monday-Sunday weeks
+// (oldest first, ending with the current week), in a single query.
+export async function getWeeklySubtaskHistory(weeks: number = 8): Promise<WeeklySubtaskStats[]> {
+  const currentWeek = getWeekRange(new Date())
+  const earliestStart = new Date(currentWeek.start)
+  earliestStart.setDate(earliestStart.getDate() - (weeks - 1) * 7)
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: "done",
+      completedAt: { gte: earliestStart, lt: currentWeek.end },
+    },
+    select: { completedAt: true, project: { select: { dashboardCategory: true } } },
+  })
+
+  const buckets: WeeklySubtaskStats[] = []
+  for (let i = 0; i < weeks; i++) {
+    const weekStartDate = new Date(earliestStart)
+    weekStartDate.setDate(weekStartDate.getDate() + i * 7)
+    const { start, end } = getWeekRange(weekStartDate)
+    const weekEnd = new Date(end)
+    weekEnd.setDate(weekEnd.getDate() - 1)
+
+    const counts: Record<DashboardCategory, number> = { main: 0, side: 0, life: 0, learn: 0 }
+    for (const task of tasks) {
+      if (!task.completedAt || task.completedAt < start || task.completedAt >= end) continue
+      const cat = task.project.dashboardCategory
+      if (isDashboardCategory(cat)) counts[cat]++
+    }
+    const total = DASHBOARD_CATEGORIES.reduce((sum, cat) => sum + counts[cat], 0)
+
+    buckets.push({ weekStart: dateKey(start), weekEnd: dateKey(weekEnd), counts, total })
+  }
+
+  return buckets
 }
