@@ -241,6 +241,18 @@ export function ProjectSubtasksPanel({
     }
     setAdding(false)
     setNewTaskTitle("")
+
+    const tempId = `temp-${Date.now()}`
+    const tempTask: Task = {
+      id: tempId,
+      title,
+      status: "todo",
+      dueDate: null,
+      assigneeId: null,
+      assignee: null,
+    }
+    setTasks((prev) => [...prev, tempTask])
+
     try {
       const res = await fetch(`/api/projects/${projectId}/tasks`, {
         method: "POST",
@@ -249,10 +261,12 @@ export function ProjectSubtasksPanel({
       })
       if (res.ok) {
         const task: Task = await res.json()
-        setTasks((prev) => [...prev, task])
+        setTasks((prev) => prev.map((t) => (t.id === tempId ? task : t)))
+      } else {
+        setTasks((prev) => prev.filter((t) => t.id !== tempId))
       }
     } catch {
-      // silently fail
+      setTasks((prev) => prev.filter((t) => t.id !== tempId))
     }
   }
 
