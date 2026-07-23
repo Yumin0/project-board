@@ -6,6 +6,7 @@ import { WIDGET_REGISTRY } from "@/app/api/dashboard/route"
 import { Button } from "@/components/ui/button"
 import RecentProjectsWidget from "@/components/widgets/RecentProjectsWidget"
 import MonthlyRevenueWidget from "@/components/widgets/MonthlyRevenueWidget"
+import MoneyQuickActionsButton from "@/components/widgets/MoneyQuickActionsButton"
 import CalendarWidget from "@/components/widgets/CalendarWidget"
 import WeeklySubtasksWidget from "@/components/widgets/WeeklySubtasksWidget"
 
@@ -63,6 +64,11 @@ export default async function HomePage() {
             >
               管理專案 →
             </Link>
+          )}
+          {w.widgetType === "monthly_revenue" && (
+            <Suspense fallback={null}>
+              <MoneyQuickActionsButton />
+            </Suspense>
           )}
           {w.widgetType === "weekly_subtasks" && (
             <Link

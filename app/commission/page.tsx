@@ -36,9 +36,18 @@ export default async function CommissionPage({
       },
       orderBy: { createdAt: "asc" },
     }),
-    // 副業 projects without a commission record yet
+    // 副業-category projects that still need commission settlement: no
+    // commission record yet, AND no existing payout transfer. The transfer
+    // check drops ~95 old periods that were split via manual transfers before
+    // this feature existed (labels must match PAYMENT_LABELS in ./actions.ts).
+    // Filter on category, not dashboardCategory (which defaults to "side" for
+    // every project and isn't a real type signal).
     prisma.project.findMany({
-      where: { dashboardCategory: "side", commissionRecord: null },
+      where: {
+        category: { name: "副業" },
+        commissionRecord: null,
+        transfers: { none: { name: { in: ["業務佣金", "專案製作費", "專案諮詢費"] } } },
+      },
       include: {
         assignees: { select: { id: true, name: true } },
         category: { include: { fields: { orderBy: { order: "asc" } } } },

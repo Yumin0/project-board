@@ -275,3 +275,85 @@ export async function deleteProject(id: string) {
 
   revalidatePath("/projects")
 }
+
+// ---------------------------------------------------------------------------
+// Quick create: a new project plus its first income record, in one step —
+// used by the homepage "收入" widget's quick actions.
+// ---------------------------------------------------------------------------
+
+const quickCreateSchema = z.object({
+  title: z.string().trim().min(1, "標題為必填").max(200),
+  accountId: z.string().trim().min(1, "請選擇帳戶"),
+  amount: z.coerce.number().int("請輸入整數金額").refine((value) => value !== 0, "金額不可為 0"),
+  date: z
+    .string()
+    .trim()
+    .min(1, "請選擇日期")
+    .refine((value) => !Number.isNaN(Date.parse(value)), "請輸入有效的日期"),
+  note: z.string().trim().max(500).optional(),
+})
+
+export type QuickCreateProjectState = {
+  status: "idle" | "success" | "error"
+  error?: string
+  fieldErrors?: Partial<
+    Record<"title" | "categoryId" | "accountId" | "amount" | "date" | "note", string[]>
+  >
+  customFieldErrors?: Record<string, string>
+  projectId?: string
+}
+
+export async function createProjectWithIncome(
+  _prevState: QuickCreateProjectState,
+  formData: FormData
+): Promise<QuickCreateProjectState> {
+  const parsed = quickCreateSchema.safeParse({
+    title: formData.get("title"),
+    accountId: formData.get("accountId"),
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+    note: formData.get("note") ?? "",
+  })
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: parsed.error.flatten().fieldErrors }
+  }
+
+  const rawCategoryId = formData.get("categoryId")
+  const categoryId = rawCategoryId === "__uncategorized__" ? null : ((rawCategoryId as string) || null)
+
+  const { values: customFieldValues, errors: customFieldErrors } =
+    await buildCustomFieldValues(formData, categoryId)
+  if (Object.keys(customFieldErrors).length > 0) {
+    return { status: "error", customFieldErrors }
+  }
+
+  const { title, ...income } = parsed.data
+
+  const project = await prisma.$transaction(async (tx) => {
+    const created = await tx.project.create({
+      data: {
+        title,
+        categoryId,
+        customFieldValues: customFieldValues ?? Prisma.DbNull,
+        status: "in_progress",
+      },
+    })
+
+    await tx.incomeRecord.create({
+      data: {
+        accountId: income.accountId,
+        amount: income.amount,
+        date: new Date(income.date),
+        note: income.note || null,
+        projectId: created.id,
+      },
+    })
+
+    return created
+  })
+
+  revalidatePath("/projects")
+  revalidatePath("/accounts")
+  revalidatePath("/")
+  return { status: "success", projectId: project.id }
+}
