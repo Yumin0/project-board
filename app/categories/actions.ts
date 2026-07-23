@@ -12,6 +12,7 @@ const fieldSchema = z
     name: z.string().trim().min(1, "欄位名稱為必填").max(50),
     type: z.enum(["text", "number", "date", "select"]),
     options: z.array(z.string().trim().min(1).max(50)).max(50).default([]),
+    hiddenOptions: z.array(z.string().trim().min(1).max(50)).max(50).default([]),
   })
   .refine((field) => field.type !== "select" || field.options.length > 0, {
     message: "下拉選單至少需要一個選項",
@@ -50,6 +51,28 @@ function parseCategoryForm(formData: FormData) {
   }
 }
 
+// Non-select fields carry no options at all, and a hidden option only makes
+// sense while it still exists in `options`.
+function normalizeOptions(field: z.infer<typeof fieldSchema>) {
+  if (field.type !== "select") {
+    return { options: [], hiddenOptions: [] }
+  }
+  return {
+    options: field.options,
+    hiddenOptions: field.hiddenOptions.filter((option) =>
+      field.options.includes(option)
+    ),
+  }
+}
+
+// Prisma errors are many lines long and would blow up the dialog layout; the
+// last non-empty line is the part that actually says what went wrong.
+function shortErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error)
+  const lastLine = raw.split("\n").filter((line) => line.trim()).pop() ?? raw
+  return lastLine.trim().slice(0, 200)
+}
+
 function isUniqueNameViolation(error: unknown) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
@@ -78,7 +101,7 @@ export async function createCategory(
           create: fields.map((field, index) => ({
             name: field.name,
             type: field.type,
-            options: field.type === "select" ? field.options : [],
+            ...normalizeOptions(field),
             order: index,
           })),
         },
@@ -119,18 +142,18 @@ export async function updateCategory(
         where: { categoryId: id, id: { notIn: keepIds } },
       }),
       ...fields.map((field, index) => {
-        const options = field.type === "select" ? field.options : []
+        const options = normalizeOptions(field)
         return field.id
           ? prisma.categoryField.update({
               where: { id: field.id },
-              data: { name: field.name, type: field.type, options, order: index },
+              data: { name: field.name, type: field.type, ...options, order: index },
             })
           : prisma.categoryField.create({
               data: {
                 categoryId: id,
                 name: field.name,
                 type: field.type,
-                options,
+                ...options,
                 order: index,
               },
             })
@@ -140,7 +163,16 @@ export async function updateCategory(
     if (isUniqueNameViolation(error)) {
       return { status: "error", fieldErrors: { name: ["已有相同名稱的類別"] } }
     }
-    return { status: "error", error: "找不到此類別，可能已被刪除" }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return { status: "error", error: "找不到此類別，可能已被刪除" }
+    }
+    // Anything else is a real bug — surface it instead of blaming the category.
+    // The full stack goes to the server log; the dialog only gets a short hint.
+    console.error("updateCategory failed", error)
+    return { status: "error", error: `儲存失敗：${shortErrorMessage(error)}` }
   }
 
   revalidatePath("/categories")

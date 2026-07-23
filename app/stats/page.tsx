@@ -73,7 +73,7 @@ export default async function StatsPage() {
         <WeeklySubtaskHistoryChart data={chartData} />
 
         <div className="mt-6 border-t border-white/50 pt-2">
-          <Table>
+          <Table surface={false}>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>週別</TableHead>

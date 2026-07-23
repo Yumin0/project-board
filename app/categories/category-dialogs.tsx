@@ -28,7 +28,13 @@ import { CategoryForm } from "./category-form"
 type Category = {
   id: string
   name: string
-  fields: { id: string; name: string; type: string; options: string[] }[]
+  fields: {
+    id: string
+    name: string
+    type: string
+    options: string[]
+    hiddenOptions: string[]
+  }[]
 }
 
 export function NewCategoryDialog() {

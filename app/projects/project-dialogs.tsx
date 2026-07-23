@@ -61,7 +61,13 @@ type Member = {
 type Category = {
   id: string
   name: string
-  fields: { id: string; name: string; type: string; options: string[] }[]
+  fields: {
+    id: string
+    name: string
+    type: string
+    options: string[]
+    hiddenOptions: string[]
+  }[]
 }
 
 const SELECT_FIELD_EMPTY = "__empty__"
@@ -362,13 +368,15 @@ function BatchEditForm({
                             {(v: string) => (v === SELECT_FIELD_EMPTY ? "未選擇（清空）" : v)}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent alignItemWithTrigger={false} className="max-h-72">
                           <SelectItem value={SELECT_FIELD_EMPTY}>未選擇（清空）</SelectItem>
-                          {field.options.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
+                          {field.options
+                            .filter((option) => !field.hiddenOptions.includes(option))
+                            .map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     ) : (

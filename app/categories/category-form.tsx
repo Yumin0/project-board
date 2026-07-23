@@ -1,7 +1,7 @@
 "use client"
 
 import { useActionState, useEffect, useId, useState } from "react"
-import { PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DialogClose, DialogFooter } from "@/components/ui/dialog"
@@ -26,12 +26,19 @@ type FieldDraft = {
   name: string
   type: FieldType
   options: string[]
+  hiddenOptions: string[]
 }
 
 type CategoryFormValues = {
   id: string
   name: string
-  fields: { id: string; name: string; type: string; options?: string[] }[]
+  fields: {
+    id: string
+    name: string
+    type: string
+    options?: string[]
+    hiddenOptions?: string[]
+  }[]
 }
 
 const fieldTypeLabel: Record<FieldType, string> = {
@@ -70,6 +77,7 @@ export function CategoryForm({
       name: field.name,
       type: isFieldType(field.type) ? field.type : "text",
       options: field.options ?? [],
+      hiddenOptions: field.hiddenOptions ?? [],
     }))
   )
 
@@ -81,21 +89,25 @@ export function CategoryForm({
   }, [state])
 
   const fieldsJson = JSON.stringify(
-    fields.map(({ id, name, type, options }) => ({
-      id,
-      name,
-      type,
-      options:
+    fields.map(({ id, name, type, options, hiddenOptions }) => {
+      const cleanedOptions =
         type === "select"
           ? options.map((option) => option.trim()).filter((option) => option.length > 0)
-          : [],
-    }))
+          : []
+      return {
+        id,
+        name,
+        type,
+        options: cleanedOptions,
+        hiddenOptions: hiddenOptions.filter((option) => cleanedOptions.includes(option)),
+      }
+    })
   )
 
   return (
     <form id={formId} action={formAction} className="flex flex-col gap-4">
       {state.error && (
-        <p className="text-sm text-destructive" aria-live="polite">
+        <p className="text-sm break-words text-destructive" aria-live="polite">
           {state.error}
         </p>
       )}
@@ -127,7 +139,13 @@ export function CategoryForm({
             onClick={() =>
               setFields((prev) => [
                 ...prev,
-                { key: createDraftKey(), name: "", type: "text", options: [] },
+                {
+                  key: createDraftKey(),
+                  name: "",
+                  type: "text",
+                  options: [],
+                  hiddenOptions: [],
+                },
               ])
             }
           >
@@ -197,53 +215,97 @@ export function CategoryForm({
 
             {field.type === "select" && (
               <div className="ml-1 flex flex-col gap-2 rounded-lg border border-dashed p-2.5">
-                <p className="text-xs font-medium text-muted-foreground">選項</p>
-                {field.options.map((option, optionIndex) => (
-                  <div key={optionIndex} className="flex items-center gap-2">
-                    <Input
-                      value={option}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        setFields((prev) =>
-                          prev.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  options: item.options.map((opt, optIndex) =>
-                                    optIndex === optionIndex ? value : opt
-                                  ),
-                                }
-                              : item
+                <p className="text-xs font-medium text-muted-foreground">
+                  選項（隱藏的選項不會出現在專案的下拉選單，但已填的資料會保留）
+                </p>
+                <div className="flex max-h-64 flex-col gap-2 overflow-y-auto px-0.5 py-0.5">
+                {field.options.map((option, optionIndex) => {
+                  const hidden = field.hiddenOptions.includes(option)
+                  return (
+                    <div key={optionIndex} className="flex items-center gap-2">
+                      <Input
+                        value={option}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setFields((prev) =>
+                            prev.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    options: item.options.map((opt, optIndex) =>
+                                      optIndex === optionIndex ? value : opt
+                                    ),
+                                    // keep the hidden flag attached across renames
+                                    hiddenOptions: item.hiddenOptions.map((opt) =>
+                                      opt === option ? value : opt
+                                    ),
+                                  }
+                                : item
+                            )
                           )
-                        )
-                      }}
-                      placeholder="選項名稱，例如：廠商 A"
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() =>
-                        setFields((prev) =>
-                          prev.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  options: item.options.filter(
-                                    (_, optIndex) => optIndex !== optionIndex
-                                  ),
-                                }
-                              : item
+                        }}
+                        placeholder="選項名稱，例如：廠商 A"
+                        className={`flex-1 ${hidden ? "opacity-50" : ""}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        title={hidden ? "顯示此選項" : "隱藏此選項"}
+                        onClick={() =>
+                          setFields((prev) =>
+                            prev.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    hiddenOptions: hidden
+                                      ? item.hiddenOptions.filter((opt) => opt !== option)
+                                      : [...item.hiddenOptions, option],
+                                  }
+                                : item
+                            )
                           )
-                        )
-                      }
-                    >
-                      <XIcon />
-                      <span className="sr-only">刪除選項「{option || "此選項"}」</span>
-                    </Button>
-                  </div>
-                ))}
+                        }
+                      >
+                        {hidden ? (
+                          <EyeOffIcon className="text-muted-foreground" />
+                        ) : (
+                          <EyeIcon />
+                        )}
+                        <span className="sr-only">
+                          {hidden ? "顯示" : "隱藏"}選項「{option || "此選項"}」
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        title="刪除此選項"
+                        onClick={() =>
+                          setFields((prev) =>
+                            prev.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    options: item.options.filter(
+                                      (_, optIndex) => optIndex !== optionIndex
+                                    ),
+                                    hiddenOptions: item.hiddenOptions.filter(
+                                      (opt) => opt !== option
+                                    ),
+                                  }
+                                : item
+                            )
+                          )
+                        }
+                      >
+                        <XIcon />
+                        <span className="sr-only">刪除選項「{option || "此選項"}」</span>
+                      </Button>
+                    </div>
+                  )
+                })}
+                </div>
                 <Button
                   type="button"
                   variant="outline"

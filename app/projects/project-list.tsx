@@ -51,6 +51,7 @@ type CategoryField = {
   name: string
   type: string
   options: string[]
+  hiddenOptions: string[]
 }
 
 type Category = {
@@ -89,7 +90,7 @@ type Member = {
 type CategoryOption = {
   id: string
   name: string
-  fields: { id: string; name: string; type: string; options: string[] }[]
+  fields: CategoryField[]
 }
 
 const statusLabel: Record<string, string> = {
@@ -107,6 +108,18 @@ const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
 const FILTER_ALL = "__all__"
 const FILTER_UNCATEGORIZED = "__uncategorized__"
 const FILTER_UNASSIGNED = "__unassigned__"
+
+// Beyond this many distinct custom fields the per-field columns stop fitting,
+// so they collapse back into one combined cell.
+const MAX_FIELD_COLUMNS = 4
+
+const fieldNumberFormatter = new Intl.NumberFormat("zh-TW")
+
+function formatFieldValue(field: CategoryField, value: string) {
+  if (field.type !== "number") return value
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? fieldNumberFormatter.format(parsed) : value
+}
 
 type Filters = {
   search: string
@@ -195,6 +208,24 @@ export function ProjectList({
       return true
     })
   }, [projects, filters])
+
+  // Custom fields belong to a Category, so the table can't hard-code columns
+  // for them. Promote whichever fields actually carry a value in the current
+  // result set to real columns instead, and fall back to a single combined
+  // cell when that would make the table unmanageably wide.
+  const fieldColumns = useMemo(() => {
+    const byId = new Map<string, CategoryField>()
+    for (const project of filteredProjects) {
+      for (const field of project.category?.fields ?? []) {
+        if (project.customFieldValues?.[field.id]) byId.set(field.id, field)
+      }
+    }
+    return [...byId.values()]
+  }, [filteredProjects])
+
+  const useFieldColumns = fieldColumns.length > 0 && fieldColumns.length <= MAX_FIELD_COLUMNS
+  const columnCount =
+    8 + (useFieldColumns ? fieldColumns.length : fieldColumns.length > 0 ? 1 : 0)
 
   const hasActiveFilters =
     filters.search.trim() !== "" ||
@@ -585,14 +616,24 @@ export function ProjectList({
             })}
           </div>
 
-          <div className="hidden overflow-hidden rounded-xl border lg:block">
+          <div className="hidden lg:block">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-16">ID</TableHead>
                   <TableHead>標題</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead>類型／欄位</TableHead>
+                  <TableHead className="w-24">狀態</TableHead>
+                  <TableHead className="w-24">類型</TableHead>
+                  {useFieldColumns
+                    ? fieldColumns.map((field) => (
+                        <TableHead
+                          key={field.id}
+                          className={cn("w-28", field.type === "number" && "text-right")}
+                        >
+                          {field.name}
+                        </TableHead>
+                      ))
+                    : fieldColumns.length > 0 && <TableHead className="w-52">欄位</TableHead>}
                   <TableHead>負責人</TableHead>
                   <TableHead className="text-right">任務</TableHead>
                   <TableHead>更新於</TableHead>
@@ -614,7 +655,7 @@ export function ProjectList({
                   return (
                     <Fragment key={project.id}>
                       <TableRow data-state={isSelected ? "selected" : undefined}>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
+                        <TableCell className="align-top font-mono text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => toggleExpand(project)}
@@ -628,7 +669,7 @@ export function ProjectList({
                             {project.id}
                           </div>
                         </TableCell>
-                        <TableCell className="whitespace-normal">
+                        <TableCell className="align-top whitespace-normal">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-medium">{project.title}</span>
                             {project.description && (
@@ -638,41 +679,71 @@ export function ProjectList({
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <Badge variant={statusVariant[project.status] ?? "default"}>
                             {statusLabel[project.status] ?? project.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="whitespace-normal">
-                          <div className="flex flex-wrap items-center gap-1">
-                            {project.category && (
-                              <Badge variant="outline">{project.category.name}</Badge>
-                            )}
-                            {filledCustomFields.map(({ field, value }) => (
-                              <Badge key={field.id} variant="secondary">
-                                {field.name}：{value}
-                              </Badge>
-                            ))}
-                          </div>
+                        <TableCell className="align-top">
+                          {project.category ? (
+                            <Badge variant="outline">{project.category.name}</Badge>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        {useFieldColumns ? (
+                          fieldColumns.map((field) => {
+                            const value = project.customFieldValues?.[field.id]
+                            return (
+                              <TableCell
+                                key={field.id}
+                                className={cn(
+                                  "align-top text-sm whitespace-normal",
+                                  field.type === "number" && "text-right tabular-nums"
+                                )}
+                              >
+                                {value ? (
+                                  formatFieldValue(field, value)
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            )
+                          })
+                        ) : fieldColumns.length > 0 ? (
+                          <TableCell className="align-top whitespace-normal">
+                            {filledCustomFields.length > 0 ? (
+                              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                                {filledCustomFields.map(({ field, value }) => (
+                                  <Fragment key={field.id}>
+                                    <dt className="text-muted-foreground">{field.name}</dt>
+                                    <dd className="break-words">{formatFieldValue(field, value)}</dd>
+                                  </Fragment>
+                                ))}
+                              </dl>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        ) : null}
+                        <TableCell className="align-top text-sm text-muted-foreground">
                           {project.assignees.length > 0
                             ? project.assignees.map((a) => a.name).join("、")
                             : "—"}
                         </TableCell>
-                        <TableCell className="text-right text-sm tabular-nums">
+                        <TableCell className="align-top text-right text-sm tabular-nums">
                           {tasks.length > 0 ? (
                             <span className={cn(doneCount === tasks.length && "text-green-600 dark:text-green-500")}>
                               {doneCount}/{tasks.length}
                             </span>
                           ) : "—"}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="align-top text-xs text-muted-foreground">
                           {new Intl.DateTimeFormat("zh-TW", {
                             dateStyle: "medium",
                           }).format(project.updatedAt)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <div className="flex items-center justify-end gap-0.5">
                             {selectionMode ? (
                               <Checkbox
@@ -698,7 +769,7 @@ export function ProjectList({
                       </TableRow>
                       {isExpanded && (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={8} className="p-0">
+                          <TableCell colSpan={columnCount} className="p-0">
                             <div className="border-t bg-muted/30 px-4 py-2">
                               {tasks.length === 0 && addingTaskForProject !== project.id && (
                                 <p className="py-2 text-xs text-muted-foreground">尚無任務</p>

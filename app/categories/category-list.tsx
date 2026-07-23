@@ -12,7 +12,13 @@ import { DeleteCategoryDialog, EditCategoryDialog } from "./category-dialogs"
 type Category = {
   id: string
   name: string
-  fields: { id: string; name: string; type: string; options: string[] }[]
+  fields: {
+    id: string
+    name: string
+    type: string
+    options: string[]
+    hiddenOptions: string[]
+  }[]
   _count: { projects: number }
 }
 

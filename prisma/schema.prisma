@@ -129,6 +129,9 @@ model CategoryField {
   name       String
   type       String   // text, number, date, select
   options    String[] @default([])
+  // Subset of `options` that stays in the data (so existing projects keep their
+  // value) but is no longer offered when picking a value in the project form.
+  hiddenOptions String[] @default([])
   order      Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

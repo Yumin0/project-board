@@ -335,123 +335,121 @@ export function AccountList({
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-        <Table>
-          <TableHeader>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <SortableHead
+              className="w-28"
+              active={sort.column === "date"}
+              dir={sort.dir}
+              onClick={() => toggleSort("date")}
+            >
+              日期
+            </SortableHead>
+            {selectedId === ALL && <TableHead className="w-32">帳戶</TableHead>}
+            <TableHead className="w-20">類型</TableHead>
+            <TableHead className="w-28">項目</TableHead>
+            <SortableHead
+              active={sort.column === "project"}
+              dir={sort.dir}
+              onClick={() => toggleSort("project")}
+            >
+              專案
+            </SortableHead>
+            <SortableHead
+              className="w-32"
+              align="right"
+              active={sort.column === "amount"}
+              dir={sort.dir}
+              onClick={() => toggleSort("amount")}
+            >
+              金額
+            </SortableHead>
+            <TableHead className="w-20 text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visibleLedger.length === 0 ? (
             <TableRow className="hover:bg-transparent">
-              <SortableHead
-                className="w-28"
-                active={sort.column === "date"}
-                dir={sort.dir}
-                onClick={() => toggleSort("date")}
-              >
-                日期
-              </SortableHead>
-              {selectedId === ALL && <TableHead className="w-32">帳戶</TableHead>}
-              <TableHead className="w-20">類型</TableHead>
-              <TableHead className="w-28">項目</TableHead>
-              <SortableHead
-                active={sort.column === "project"}
-                dir={sort.dir}
-                onClick={() => toggleSort("project")}
-              >
-                專案
-              </SortableHead>
-              <SortableHead
-                className="w-32"
-                align="right"
-                active={sort.column === "amount"}
-                dir={sort.dir}
-                onClick={() => toggleSort("amount")}
-              >
-                金額
-              </SortableHead>
-              <TableHead className="w-20 text-right">操作</TableHead>
+              <TableCell colSpan={colSpan} className="py-12 text-center text-sm text-muted-foreground">
+                {query.trim() ? "找不到符合的紀錄" : "尚無收支紀錄"}
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleLedger.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={colSpan} className="py-12 text-center text-sm text-muted-foreground">
-                  {query.trim() ? "找不到符合的紀錄" : "尚無收支紀錄"}
+          ) : (
+            visibleLedger.map((entry) => (
+              <TableRow key={entry.key}>
+                <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
+                  {dateFormatter.format(entry.date)}
                 </TableCell>
-              </TableRow>
-            ) : (
-              visibleLedger.map((entry) => (
-                <TableRow key={entry.key}>
-                  <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
-                    {dateFormatter.format(entry.date)}
+                {selectedId === ALL && (
+                  <TableCell className="align-top text-sm font-medium">
+                    <span className="block truncate">{entry.account.name}</span>
                   </TableCell>
-                  {selectedId === ALL && (
-                    <TableCell className="align-top text-sm font-medium">
-                      <span className="block truncate">{entry.account.name}</span>
-                    </TableCell>
-                  )}
-                  <TableCell className="align-top">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "shrink-0",
-                        entry.typeLabel === "轉出" && "text-destructive"
-                      )}
-                    >
-                      {entry.typeLabel}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="align-top text-sm whitespace-normal">
-                    {entry.item ? (
-                      <span>{entry.item}</span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-top whitespace-normal">
-                    {entry.project ? (
-                      <span className="text-sm">{entry.project.title}</span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                    {entry.note && entry.note !== entry.project?.title && entry.note !== entry.item && (
-                      <p className="break-words text-xs text-muted-foreground">{entry.note}</p>
-                    )}
-                  </TableCell>
-                  <TableCell
+                )}
+                <TableCell className="align-top">
+                  <Badge
+                    variant="outline"
                     className={cn(
-                      "align-top text-right font-medium whitespace-nowrap tabular-nums",
-                      entry.signedAmount < 0 && "text-destructive"
+                      "shrink-0",
+                      entry.typeLabel === "轉出" && "text-destructive"
                     )}
                   >
-                    {signedCurrencyFormatter.format(entry.signedAmount)}
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="flex items-center justify-end gap-0.5">
-                      {entry.kind === "income" && entry.record ? (
-                        <>
-                          <EditIncomeRecordDialog
-                            record={entry.record}
-                            accounts={accountOptions}
-                            projects={projects}
-                          />
-                          <DeleteIncomeRecordDialog record={entry.record} />
-                        </>
-                      ) : entry.transfer ? (
-                        <>
-                          <EditTransferDialog
-                            transfer={entry.transfer}
-                            accounts={accountOptions}
-                            projects={projects}
-                          />
-                          <DeleteTransferDialog transfer={entry.transfer} />
-                        </>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                    {entry.typeLabel}
+                  </Badge>
+                </TableCell>
+                <TableCell className="align-top text-sm whitespace-normal">
+                  {entry.item ? (
+                    <span>{entry.item}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="align-top whitespace-normal">
+                  {entry.project ? (
+                    <span className="text-sm">{entry.project.title}</span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                  {entry.note && entry.note !== entry.project?.title && entry.note !== entry.item && (
+                    <p className="break-words text-xs text-muted-foreground">{entry.note}</p>
+                  )}
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "align-top text-right font-medium whitespace-nowrap tabular-nums",
+                    entry.signedAmount < 0 && "text-destructive"
+                  )}
+                >
+                  {signedCurrencyFormatter.format(entry.signedAmount)}
+                </TableCell>
+                <TableCell className="align-top">
+                  <div className="flex items-center justify-end gap-0.5">
+                    {entry.kind === "income" && entry.record ? (
+                      <>
+                        <EditIncomeRecordDialog
+                          record={entry.record}
+                          accounts={accountOptions}
+                          projects={projects}
+                        />
+                        <DeleteIncomeRecordDialog record={entry.record} />
+                      </>
+                    ) : entry.transfer ? (
+                      <>
+                        <EditTransferDialog
+                          transfer={entry.transfer}
+                          accounts={accountOptions}
+                          projects={projects}
+                        />
+                        <DeleteTransferDialog transfer={entry.transfer} />
+                      </>
+                    ) : null}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   )
 }

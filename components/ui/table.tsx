@@ -4,11 +4,27 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  containerClassName,
+  surface = true,
+  ...props
+}: React.ComponentProps<"table"> & {
+  /**
+   * Renders the table on its own rounded card surface. Turn this off when the
+   * table already sits inside a card or other panel.
+   */
+  surface?: boolean
+  containerClassName?: string
+}) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn(
+        "relative w-full overflow-x-auto",
+        surface && "rounded-xl bg-card ring-1 ring-foreground/10",
+        containerClassName
+      )}
     >
       <table
         data-slot="table"

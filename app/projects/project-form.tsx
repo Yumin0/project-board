@@ -28,6 +28,7 @@ type CategoryField = {
   name: string
   type: string
   options: string[]
+  hiddenOptions?: string[]
 }
 
 type Category = {
@@ -258,7 +259,15 @@ export function ProjectForm({
               {selectedCategory.name} 的固定欄位
             </p>
             <div className="grid grid-cols-1 gap-4 @sm:grid-cols-2">
-              {selectedCategory.fields.map((field) => (
+              {selectedCategory.fields.map((field) => {
+                const currentValue = project?.customFieldValues?.[field.id] ?? ""
+                // Hidden options stay out of the list, unless this project is
+                // still using one — otherwise editing would silently drop it.
+                const visibleOptions = field.options.filter(
+                  (option) =>
+                    !field.hiddenOptions?.includes(option) || option === currentValue
+                )
+                return (
                 <div key={field.id} className="flex flex-col gap-1.5">
                   <Label htmlFor={`${formId}-customField-${field.id}`} className={LABEL_CLASS}>
                     {field.name}
@@ -266,7 +275,7 @@ export function ProjectForm({
                   {field.type === "select" ? (
                     <Select
                       name={`customField_${field.id}`}
-                      defaultValue={project?.customFieldValues?.[field.id] || SELECT_FIELD_EMPTY}
+                      defaultValue={currentValue || SELECT_FIELD_EMPTY}
                     >
                       <SelectTrigger
                         id={`${formId}-customField-${field.id}`}
@@ -279,9 +288,9 @@ export function ProjectForm({
                           }
                         </SelectValue>
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent alignItemWithTrigger={false} className="max-h-72">
                         <SelectItem value={SELECT_FIELD_EMPTY}>未選擇</SelectItem>
-                        {field.options.map((option) => (
+                        {visibleOptions.map((option) => (
                           <SelectItem key={option} value={option}>
                             {option}
                           </SelectItem>
@@ -303,7 +312,8 @@ export function ProjectForm({
                     </p>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
