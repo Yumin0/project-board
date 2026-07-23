@@ -25,15 +25,16 @@ type ProjectSearchResult = {
   status: string
 }
 
+// Stable identity matters: `list` below is compared by reference to decide when
+// to reset the keyboard selection, so an empty result must not be a fresh array.
+const NO_RESULTS: ProjectSearchResult[] = []
+
 function useProjectSearch(query: string) {
-  const [results, setResults] = useState<ProjectSearchResult[]>([])
+  const trimmed = query.trim()
+  const [results, setResults] = useState<ProjectSearchResult[]>(NO_RESULTS)
 
   useEffect(() => {
-    const trimmed = query.trim()
-    if (!trimmed) {
-      setResults([])
-      return
-    }
+    if (!trimmed) return
 
     const controller = new AbortController()
     const timer = setTimeout(() => {
@@ -49,9 +50,11 @@ function useProjectSearch(query: string) {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [query])
+  }, [trimmed])
 
-  return results
+  // An empty query has no results by definition, so derive that rather than
+  // clearing state from inside the effect.
+  return trimmed ? results : NO_RESULTS
 }
 
 export function AppHeader() {
@@ -66,9 +69,14 @@ export function AppHeader() {
   const results = useProjectSearch(query)
   const list = query.trim() ? results : recentProjects
 
-  useEffect(() => {
+  // Reset the highlighted row whenever the list changes. Adjusting state during
+  // render lands it in the same commit as the new list, so the old index never
+  // paints against it.
+  const [listForActiveIndex, setListForActiveIndex] = useState(list)
+  if (listForActiveIndex !== list) {
+    setListForActiveIndex(list)
     setActiveIndex(-1)
-  }, [list])
+  }
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

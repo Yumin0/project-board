@@ -88,9 +88,13 @@ export function ProjectForm({
     initialState
   )
   const [categoryId, setCategoryId] = useState(project?.categoryId ?? UNCATEGORIZED)
-  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(
-    new Set(project?.assigneeIds ?? [])
-  )
+  const [assigneeIds, setAssigneeIds] = useState<Set<string>>(() => {
+    // An existing project keeps whoever is already saved on it; a brand new one
+    // starts on the same default a non-副業 category would pick.
+    if (project) return new Set(project.assigneeIds ?? [])
+    const yumin = members.find((member) => member.name === "Yumin")
+    return yumin ? new Set([yumin.id]) : new Set()
+  })
 
   useEffect(() => {
     if (state.status === "success") {
@@ -107,13 +111,17 @@ export function ProjectForm({
   const isSideBusiness = selectedCategory?.name === "副業"
   const categoryStyle = getCategoryStyleByName(selectedCategory?.name)
 
-  useEffect(() => {
+  // Switching the category away from 副業 defaults the assignee to Yumin — but
+  // only on an actual switch. Running this on mount would overwrite the
+  // assignees already saved on the project being edited.
+  const [lastIsSideBusiness, setLastIsSideBusiness] = useState(isSideBusiness)
+  if (lastIsSideBusiness !== isSideBusiness) {
+    setLastIsSideBusiness(isSideBusiness)
     if (!isSideBusiness) {
       const yumin = members.find((member) => member.name === "Yumin")
       setAssigneeIds(yumin ? new Set([yumin.id]) : new Set())
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSideBusiness])
+  }
 
   return (
     <form id={formId} action={formAction} className="contents">

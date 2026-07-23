@@ -82,13 +82,19 @@ export function QuickEditProjectDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
-  const [data, setData] = useState<EditData | null>(null)
+  const [fetched, setFetched] = useState<{ projectId: string; data: EditData | null } | null>(null)
+
+  // Read the cache while rendering so an already-prefetched project paints its
+  // content on the first frame instead of flashing the loading state. A fetched
+  // result only counts for the project it was requested for, which also resets
+  // the dialog to loading when it switches to an uncached project.
+  const cached = projectId ? (editDataCache[projectId] ?? null) : null
+  const data = cached ?? (fetched?.projectId === projectId ? fetched.data : null)
 
   useEffect(() => {
     if (!projectId) return
 
     if (editDataCache[projectId]) {
-      setData(editDataCache[projectId])
       addRecentProject({
         id: editDataCache[projectId].project.id,
         title: editDataCache[projectId].project.title,
@@ -97,7 +103,6 @@ export function QuickEditProjectDialog({
       return
     }
 
-    setData(null)
     let cancelled = false
     fetch(`/api/projects/${projectId}/edit-data`)
       .then((res) => (res.ok ? res.json() : null))
@@ -111,10 +116,10 @@ export function QuickEditProjectDialog({
             status: json.project.status,
           })
         }
-        setData(json)
+        setFetched({ projectId, data: json })
       })
       .catch(() => {
-        if (!cancelled) setData(null)
+        if (!cancelled) setFetched({ projectId, data: null })
       })
 
     return () => {
